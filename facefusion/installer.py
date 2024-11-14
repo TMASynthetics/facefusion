@@ -89,6 +89,8 @@ def run(program : ArgumentParser) -> None:
 
 			subprocess.call([ shutil.which('conda'), 'env', 'config', 'vars', 'set', 'PATH=' + os.pathsep.join(library_paths) ])
 
-	if onnxruntime_version < '1.19.0':
+	if onnxruntime_version < '1.19.3':
 		subprocess.call([ shutil.which('pip'), 'install', 'numpy==1.26.4', '--force-reinstall' ])
 	subprocess.call([ shutil.which('pip'), 'install', 'python-multipart==0.0.12', '--force-reinstall' ])
+	
+	subprocess.call([ shutil.which('pip'), 'install', 'numpy==1.26.4', '--force-reinstall' ]) # age_modifier dependencies needs numpy1
