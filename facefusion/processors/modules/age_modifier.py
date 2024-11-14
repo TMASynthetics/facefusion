@@ -5,6 +5,7 @@ import cv2
 import numpy
 from cv2.typing import Size
 from numpy.typing import NDArray
+import onnxruntime
 
 import facefusion.jobs.job_manager
 import facefusion.jobs.job_store
@@ -51,6 +52,40 @@ MODEL_SET : ModelSet =\
 			{
 				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/best_unet_model.pth',
 				'path': resolve_relative_path("../.assets/models/best_unet_model.pth"),
+			},
+		},	
+		'masks':
+        {
+            'mask':
+			{	
+				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/mask1024.jpg',
+				'path': resolve_relative_path("../.assets/mask1024.jpg"),
+			},
+            'small_mask':
+			{
+				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/mask512.jpg',
+				'path': resolve_relative_path("../.assets/mask512.jpg"),
+			}
+		},
+		'template': 'ffhq_1024',
+		'size': (1024, 1024)
+	},
+	'fran_onnx':
+	{
+		'hashes':
+		{
+			'age_modifier':
+			{
+				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/fran_onnx.hash',
+				'path': resolve_relative_path("../.assets/models/fran_onnx.hash"),
+			}
+		},
+		'sources':
+		{
+			'age_modifier':
+			{
+				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/fran.onnx',
+				'path': resolve_relative_path("../.assets/models/fran.onnx"),
 			},
 		},	
 		'masks':
@@ -155,7 +190,9 @@ def pre_check() -> bool:
 			logger.error(wording.get('help.download_fran_masks_first') + wording.get('exclamation_mark') + ' : ' + small_mask_url, __name__)
 			return False
 		return True
-	else :
+	elif age_modifier_model == 'fran_onnx':
+		return True
+	else:
 		return conditional_download_hashes(download_directory_path, model_hashes) and conditional_download_sources(download_directory_path, model_sources)
 	
 	
@@ -190,7 +227,6 @@ def sliding_window_tensor(input_tensor, window_size, stride, your_model, mask, s
     """
     Apply aging operation on input tensor using a sliding-window method. This operation is done on the GPU, if available.
     """
-
     start_total = time.time()
 
     input_tensor = input_tensor.to(next(your_model.parameters()).device)
@@ -211,30 +247,63 @@ def sliding_window_tensor(input_tensor, window_size, stride, your_model, mask, s
 
             # Forward pass
             with torch.no_grad():
-                # start = time.time()
+                start = time.time()
                 output = your_model(input_variable)
-                # print('pytorch inference time (s) : ', time.time()-start)
-
-
-                # dummy_input = torch.randn(1,5,512,512).to('mps')
-                # torch.onnx.export(your_model, dummy_input, "fran.onnx",
-                # opset_version=9,
-                # input_names = ['input'],     
-                #   output_names = ['output'])
-
-
-                # start = time.time()
-                # output_onnx = ort_sess.run(None, {'input': input_variable.cpu().numpy()})[0]
-                # print('onnx inference time (s) : ', time.time()-start)
-
-
+                print('pytorch inference time (s) : ', time.time()-start)
                 
             output_tensor[:, :, y:y + window_size, x:x + window_size] += output * small_mask
             count_tensor[:, :, y:y + window_size, x:x + window_size] += small_mask
 
     count_tensor = torch.clamp(count_tensor, min=1.0)
 
-    # print('TOTAL inference time (s) : ', time.time()-start_total)
+    print('TOTAL inference time (s) : ', time.time()-start_total)
+
+    # Average the overlapping regions
+    output_tensor /= count_tensor
+
+    # Apply mask
+    output_tensor *= mask
+
+    return output_tensor.cpu()
+
+
+def sliding_window_tensor_onnx(input_tensor, window_size, stride, onnx_model_path, mask, small_mask):
+    """
+    Apply aging operation on input tensor using a sliding-window method with an ONNX model.
+    """
+    start_total = time.time()
+
+    input_tensor = input_tensor.to('cpu')  # Déplacer sur CPU pour le traitement ONNX
+    mask = mask.to('cpu')
+    small_mask = small_mask.to('cpu')
+
+    ort_session = onnxruntime.InferenceSession(onnx_model_path)
+
+    n, c, h, w = input_tensor.size()
+    output_tensor = torch.zeros((n, 3, h, w), dtype=input_tensor.dtype, device='cpu')
+    count_tensor = torch.zeros((n, 3, h, w), dtype=torch.float32, device='cpu')
+    add = 2 if window_size % stride != 0 else 1
+
+    for y in range(0, h - window_size + add, stride):
+        for x in range(0, w - window_size + add, stride):
+            window = input_tensor[:, :, y:y + window_size, x:x + window_size]
+
+            # Convert window to numpy array
+            input_variable = window.cpu().numpy()
+
+            # ONNX inference
+            with torch.no_grad():
+                start = time.time()
+                output_onnx = ort_session.run(None, {'input': input_variable})[0]
+                output = torch.tensor(output_onnx)
+                print('onnx inference time (s) : ', time.time()-start)
+
+            output_tensor[:, :, y:y + window_size, x:x + window_size] += output * small_mask
+            count_tensor[:, :, y:y + window_size, x:x + window_size] += small_mask
+
+    count_tensor = torch.clamp(count_tensor, min=1.0)
+
+    print('TOTAL inference time (s) : ', time.time()-start_total)
 
     # Average the overlapping regions
     output_tensor /= count_tensor
@@ -246,13 +315,11 @@ def sliding_window_tensor(input_tensor, window_size, stride, your_model, mask, s
 
 
 def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
-
+	
 	age_modifier_model = state_manager.get_item('age_modifier_model')
-
+	
 	if age_modifier_model == 'fran':
 		# get model and masks used for the sliding_windows
-		# print(get_model_options())
-	
 		fran_model_path = get_model_options().get("sources").get('age_modifier').get('path')
 		mask_path = get_model_options().get('masks').get("mask").get("path")
 		small_mask_path = get_model_options().get('masks').get("small_mask").get("path")
@@ -285,7 +352,6 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		orig_size = cropped_image.shape[:2]
 
 		cropped_image = transforms.ToTensor()(cropped_image)
-
 		cropped_image_resized = transforms.Resize(input_size, interpolation=Image.BILINEAR, antialias=True)(cropped_image)
 
 		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else 20
@@ -302,7 +368,7 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		stride = state_manager.get_item('age_modifier_stride')
 
 		aged_cropped_image = sliding_window_tensor(input_tensor, window_size, stride, unet_model, mask=mask_file, small_mask=small_mask_file)
-
+		
 		# resize back to original size
 		aged_cropped_image_resized = transforms.Resize(orig_size, interpolation=Image.BILINEAR, antialias=True)(
 			aged_cropped_image)
@@ -312,7 +378,64 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 
 		image = torch.clamp(image, 0, 1)
 		paste_vision_frame =  cv2.cvtColor(numpy.transpose((image.numpy()*255).astype(numpy.uint8), (1, 2, 0)), cv2.COLOR_RGB2BGR)
+	
+	elif age_modifier_model == 'fran_onnx':
+		# get model and masks used for the sliding_window
+		onnx_model_path = get_model_options().get("sources").get('age_modifier').get('path')
+		mask_path = get_model_options().get('masks').get("mask").get("path")
+		small_mask_path = get_model_options().get('masks').get("small_mask").get("path")
+		input_size = get_model_options().get('size')  # (1024, 1024)
 
+		mask_file = torch.from_numpy(numpy.array(Image.open(mask_path).convert('L'))) / 255
+		small_mask_file = torch.from_numpy(numpy.array(Image.open(small_mask_path).convert('L'))) / 255
+
+		image = temp_vision_frame.copy()
+		image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+		# calculate margins
+		margin_y_t = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .63 * .85)
+		margin_y_b = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .37 * .85)
+		margin_x = int((target_face.bounding_box[2] - target_face.bounding_box[0]) // (2 / .85))
+		margin_y_t += 2 * margin_x - margin_y_t - margin_y_b
+
+		l_y = int(max([target_face.bounding_box[1] - margin_y_t, 0]))
+		r_y = int(min([target_face.bounding_box[3] + margin_y_b, image.shape[0]]))
+		l_x = int(max([target_face.bounding_box[0] - margin_x, 0]))
+		r_x = int(min([target_face.bounding_box[2] + margin_x, image.shape[1]]))
+
+		# crop image
+		cropped_image = image[l_y:r_y, l_x:r_x, :]
+		orig_size = cropped_image.shape[:2]
+
+		cropped_image = transforms.ToTensor()(cropped_image)
+		cropped_image_resized = transforms.Resize(input_size, interpolation=Image.BILINEAR, antialias=True)(cropped_image)
+
+		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else 20
+		target_age = state_manager.get_item('age_modifier_target_age') if state_manager.get_item('age_modifier_target_age') else 80
+
+		source_age_channel = torch.full_like(cropped_image_resized[:1, :, :], source_age / 100)
+		target_age_channel = torch.full_like(cropped_image_resized[:1, :, :], target_age / 100)
+		input_tensor = torch.cat([cropped_image_resized, source_age_channel, target_age_channel], dim=0).unsqueeze(0)
+
+		image = transforms.ToTensor()(image)
+
+		window_size = 512
+		stride = state_manager.get_item('age_modifier_stride')
+
+		# Using the sliding window function with ONNX model
+		aged_cropped_image = sliding_window_tensor_onnx(input_tensor, window_size, stride, onnx_model_path, mask=mask_file, small_mask=small_mask_file)
+		
+		# Resize back to original size
+		aged_cropped_image_resized = transforms.Resize(orig_size, interpolation=Image.BILINEAR, antialias=True)(
+			aged_cropped_image)
+
+		# Re-apply
+		image[:, l_y:r_y, l_x:r_x] += aged_cropped_image_resized.squeeze(0)
+		image = torch.clamp(image, 0, 1)
+
+		paste_vision_frame = cv2.cvtColor(numpy.transpose((image.numpy() * 255).astype(numpy.uint8), (1, 2, 0)), cv2.COLOR_RGB2BGR)
+		
+	
 	else:
 
 		model_template = get_model_options().get('template')
