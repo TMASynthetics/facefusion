@@ -17,7 +17,7 @@ from facefusion.face_helper import merge_matrix, paste_back, scale_face_landmark
 from facefusion.face_masker import create_occlusion_mask, create_static_box_mask
 from facefusion.face_selector import find_similar_faces, sort_and_filter_faces
 from facefusion.face_store import get_reference_faces
-from facefusion.filesystem import in_directory, is_image, is_video, resolve_relative_path, same_file_extension
+from facefusion.filesystem import in_directory, is_image, is_video, is_file, resolve_relative_path, same_file_extension
 from facefusion.processors import choices as processors_choices
 from facefusion.processors.typing import AgeModifierInputs
 from facefusion.program_helper import find_argument_group
@@ -32,14 +32,6 @@ from torchvision import transforms
 from PIL import Image
 import time
 from facefusion.processors.models import UNet
-
-
-mask_file = torch.from_numpy(numpy.array(Image.open(resolve_relative_path('../.assets/mask1024.jpg')).convert('L'))) / 255
-small_mask_file = torch.from_numpy(numpy.array(Image.open(resolve_relative_path('../.assets/mask512.jpg')).convert('L'))) / 255
-device = torch.device("cuda:0" if torch.cuda.is_available() else "mps")
-unet_model = UNet().to(device)
-unet_model.load_state_dict(torch.load(resolve_relative_path('../.assets/models/best_unet_model.pth'), map_location=device))
-unet_model.eval()
 
 MODEL_SET : ModelSet =\
 {
@@ -60,20 +52,19 @@ MODEL_SET : ModelSet =\
 				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/best_unet_model.pth',
 				'path': resolve_relative_path("../.assets/models/best_unet_model.pth"),
 			},
-			
-			#'masks':
-			#{
-		#		'mask': 
-		#		{
-		#			'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/mask1024.jpg',
-		#			'path': resolve_relative_path("../.assets/mask1024.jpg"),
-		#		},
-		#		'small_mask':
-		#		{
-		#			'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/mask512.jpg',
-		#			'path': resolve_relative_path("../.assets/mask512.jpg"),
-		#		}
-		#	}
+		},	
+		'masks':
+        {
+            'mask':
+			{	
+				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/mask1024.jpg',
+				'path': resolve_relative_path("../.assets/mask1024.jpg"),
+			},
+            'small_mask':
+			{
+				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/mask512.jpg',
+				'path': resolve_relative_path("../.assets/mask512.jpg"),
+			}
 		},
 		'template': 'ffhq_1024',
 		'size': (1024, 1024)
@@ -143,11 +134,31 @@ def pre_check() -> bool:
 	download_directory_path = resolve_relative_path('../.assets/models')
 	model_hashes = get_model_options().get('hashes')
 	model_sources = get_model_options().get('sources')
-	#print(conditional_download_hashes(download_directory_path, model_hashes))
-	#print(conditional_download_sources(download_directory_path, model_sources))
+
+	age_modifier_model = state_manager.get_item('age_modifier_model')
+
+	# manage the manual download of fran assets
+	if age_modifier_model == 'fran':
+		model_path = model_sources.get('age_modifier').get('path')
+		model_url = model_sources.get('age_modifier').get('url')
+		mask_path = get_model_options().get('masks').get("mask").get("path")
+		mask_url = get_model_options().get('masks').get("mask").get("url")
+		small_mask_path = get_model_options().get('masks').get("small_mask").get("path")
+		small_mask_url = get_model_options().get('masks').get("small_mask").get("url")
+		if not is_file(model_path):
+			logger.error(wording.get('help.download_fran_model_first') + wording.get('exclamation_mark') + ' : ' + model_url, __name__)
+			return False
+		if not is_file(mask_path):
+			logger.error(wording.get('help.download_fran_masks_first') + wording.get('exclamation_mark') + ' : ' + mask_url, __name__)
+			return False
+		if not is_file(small_mask_path):
+			logger.error(wording.get('help.download_fran_masks_first') + wording.get('exclamation_mark') + ' : ' + small_mask_url, __name__)
+			return False
+		return True
+	else :
+		return conditional_download_hashes(download_directory_path, model_hashes) and conditional_download_sources(download_directory_path, model_sources)
 	
-	return True
-	#return conditional_download_hashes(download_directory_path, model_hashes) and conditional_download_sources(download_directory_path, model_sources)
+	
 
 def pre_process(mode : ProcessMode) -> bool:
 	if mode in [ 'output', 'preview' ] and not is_image(state_manager.get_item('target_path')) and not is_video(state_manager.get_item('target_path')):
@@ -175,7 +186,7 @@ def post_process() -> None:
 		face_recognizer.clear_inference_pool()
 
 
-def sliding_window_tensor(input_tensor, window_size, stride, your_model, mask=mask_file, small_mask=small_mask_file):
+def sliding_window_tensor(input_tensor, window_size, stride, your_model, mask, small_mask):
     """
     Apply aging operation on input tensor using a sliding-window method. This operation is done on the GPU, if available.
     """
@@ -239,14 +250,23 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 	age_modifier_model = state_manager.get_item('age_modifier_model')
 
 	if age_modifier_model == 'fran':
+		# get model and masks used for the sliding_windows
+		# print(get_model_options())
+	
+		fran_model_path = get_model_options().get("sources").get('age_modifier').get('path')
+		mask_path = get_model_options().get('masks').get("mask").get("path")
+		small_mask_path = get_model_options().get('masks').get("small_mask").get("path")
+		input_size = get_model_options().get('size') # (1024, 1024)
+
 		device = torch.device("cuda:0" if torch.cuda.is_available() else "mps")
 		unet_model = UNet().to(device)
-		unet_model.load_state_dict(torch.load(resolve_relative_path('../.assets/models/best_unet_model.pth'), map_location=device))
+		unet_model.load_state_dict(torch.load(fran_model_path, map_location=device))
 		unet_model.eval()
+		mask_file = torch.from_numpy(numpy.array(Image.open(mask_path).convert('L'))) / 255
+		small_mask_file = torch.from_numpy(numpy.array(Image.open(small_mask_path).convert('L'))) / 255
 		
 		image = temp_vision_frame.copy()
 		image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-		input_size = (1024,1024)
 
 		# calculate margins
 		margin_y_t = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .63 * .85)  # larger as the forehead is often cut off
@@ -258,7 +278,6 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		r_y = int(min([target_face.bounding_box[3] + margin_y_b, image.shape[0]]))
 		l_x = int(max([target_face.bounding_box[0] - margin_x, 0]))
 		r_x = int(min([target_face.bounding_box[2] + margin_x, image.shape[1]]))
-
 
 		# crop image
 		cropped_image = image[l_y:r_y, l_x:r_x, :]
@@ -272,7 +291,6 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else 20
 		target_age = state_manager.get_item('age_modifier_target_age') if state_manager.get_item('age_modifier_target_age') else 80
 
-
 		source_age_channel = torch.full_like(cropped_image_resized[:1, :, :], source_age / 100)
 		target_age_channel = torch.full_like(cropped_image_resized[:1, :, :], target_age / 100)
 		input_tensor = torch.cat([cropped_image_resized, source_age_channel, target_age_channel], dim=0).unsqueeze(0)
@@ -283,7 +301,7 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		window_size = 512
 		stride = state_manager.get_item('age_modifier_stride')
 
-		aged_cropped_image = sliding_window_tensor(input_tensor, window_size, stride, unet_model)
+		aged_cropped_image = sliding_window_tensor(input_tensor, window_size, stride, unet_model, mask=mask_file, small_mask=small_mask_file)
 
 		# resize back to original size
 		aged_cropped_image_resized = transforms.Resize(orig_size, interpolation=Image.BILINEAR, antialias=True)(

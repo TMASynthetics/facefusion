@@ -22,8 +22,8 @@ def render() -> None:
 	global AGE_MODIFIER_TARGET_AGE_SLIDER
 	global AGE_MODIFIER_STRIDE_SLIDER
 	
-	print(state_manager.get_item('processors'))
-	print(state_manager.get_item('age_modifier_model'))
+	#print(state_manager.get_item('processors'))
+	#print(state_manager.get_item('age_modifier_model'))
 
 	AGE_MODIFIER_MODEL_DROPDOWN = gradio.Dropdown(
 		label = wording.get('uis.age_modifier_model_dropdown'),
@@ -72,7 +72,7 @@ def render() -> None:
 	register_ui_component('age_modifier_stride_slider', AGE_MODIFIER_STRIDE_SLIDER)
 
 def listen() -> None:
-	AGE_MODIFIER_MODEL_DROPDOWN.change(update_age_modifier_model, inputs = AGE_MODIFIER_MODEL_DROPDOWN, outputs = [AGE_MODIFIER_MODEL_DROPDOWN, AGE_MODIFIER_DIRECTION_SLIDER, AGE_MODIFIER_SOURCE_AGE_SLIDER, AGE_MODIFIER_TARGET_AGE_SLIDER, AGE_MODIFIER_STRIDE_SLIDER])
+	AGE_MODIFIER_MODEL_DROPDOWN.change(update_age_modifier_model, inputs = AGE_MODIFIER_MODEL_DROPDOWN, outputs = AGE_MODIFIER_MODEL_DROPDOWN)
 	AGE_MODIFIER_DIRECTION_SLIDER.release(update_age_modifier_direction, inputs = AGE_MODIFIER_DIRECTION_SLIDER)
 	AGE_MODIFIER_SOURCE_AGE_SLIDER.release(update_age_modifier_source_age, inputs = AGE_MODIFIER_SOURCE_AGE_SLIDER)
 	AGE_MODIFIER_TARGET_AGE_SLIDER.release(update_age_modifier_target_age, inputs = AGE_MODIFIER_TARGET_AGE_SLIDER)
@@ -84,27 +84,19 @@ def listen() -> None:
 
 
 def remote_update(processors : List[str]) -> Tuple[gradio.Dropdown, gradio.Slider, gradio.Slider, gradio.Slider, gradio.Slider]:
-	print("ui_age_modifier", state_manager.get_item('processors'))
-	print("ui_age_modifier", state_manager.get_item('age_modifier_model'))
 	has_age_modifier = 'age_modifier' in processors
 	has_fran = 'fran' in state_manager.get_item('age_modifier_model')
-	return gradio.Dropdown(visible = has_age_modifier), gradio.Slider(visible = not has_fran), gradio.Slider(visible = has_fran), gradio.Slider(visible = has_fran), gradio.Slider(visible= has_fran)
+	return gradio.Dropdown(visible = has_age_modifier), gradio.Slider(visible = has_age_modifier), gradio.Slider(visible = has_age_modifier), gradio.Slider(visible = has_age_modifier), gradio.Slider(visible= has_age_modifier)
 
 
-def update_age_modifier_model(age_modifier_model : AgeModifierModel) -> Tuple[gradio.Dropdown, gradio.Slider, gradio.Slider, gradio.Slider, gradio.Slider]:
+def update_age_modifier_model(age_modifier_model : AgeModifierModel) -> gradio.Dropdown:
 	age_modifier_module = load_processor_module('age_modifier')
 	age_modifier_module.clear_inference_pool()
 	state_manager.set_item('age_modifier_model', age_modifier_model)
-	
-	has_age_modifier = 'age_modifier' in state_manager.get_item('processors')
-	has_fran = 'fran' in state_manager.get_item('age_modifier_model')
 
 	if age_modifier_module.pre_check():
-		#return gradio.Dropdown(value = state_manager.get_item('age_modifier_model'))
-		return gradio.Dropdown(value = state_manager.get_item('age_modifier_model')), gradio.Slider(visible = not has_fran), gradio.Slider(visible = has_fran), gradio.Slider(visible = has_fran), gradio.Slider(visible= has_fran)
-	#return gradio.Dropdown()
-	
-	return gradio.Dropdown(visible = has_age_modifier), gradio.Slider(visible = not has_fran), gradio.Slider(visible = has_fran), gradio.Slider(visible = has_fran), gradio.Slider(visible= has_fran)
+		return gradio.Dropdown(value = state_manager.get_item('age_modifier_model'))
+	return gradio.Dropdown()
 
 
 def update_age_modifier_direction(age_modifier_direction : float) -> None:
@@ -121,5 +113,4 @@ def update_age_modifier_target_age(age_modifier_target_age : float) -> None:
 
 def update_age_modifier_stride(age_modifier_stride : int) -> None:
 	state_manager.set_item('age_modifier_stride', int(age_modifier_stride))
-	print("gradio", state_manager.get_item('age_modifier_stride'))
 	

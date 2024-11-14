@@ -20,17 +20,11 @@ if is_macos():
 
 
 def conditional_download(download_directory_path : str, urls : List[str]) -> None:
-	print('-'*50)
 	for url in urls:
-		print('url', url)
 		download_file_name = os.path.basename(urlparse(url).path)
 		download_file_path = os.path.join(download_directory_path, download_file_name)
 		initial_size = get_file_size(download_file_path)
 		download_size = get_download_size(url)
-		response = urllib.request.urlopen(url, timeout = 10)
-		print(response)
-		content_length = response.headers.get('Content-Length')
-		print(initial_size, download_size)
 
 		if initial_size < download_size:
 			with tqdm(total = download_size, initial = initial_size, desc = wording.get('downloading'), unit = 'B', unit_scale = True, unit_divisor = 1024, ascii = ' =', disable = state_manager.get_item('log_level') in [ 'warn', 'error' ]) as progress:
@@ -68,15 +62,11 @@ def conditional_download_hashes(download_directory_path : str, hashes : Download
 		_, invalid_hash_paths = validate_hash_paths(hash_paths)
 		if invalid_hash_paths:
 			for index in hashes:
-				#print('index', index)
-				#print(hashes.get(index).get('path'))
 				if hashes.get(index).get('path') in invalid_hash_paths:
 					invalid_hash_url = hashes.get(index).get('url')
-					#print('invalid_hash_url',invalid_hash_url)
 					conditional_download(download_directory_path, [ invalid_hash_url ])
 
 	valid_hash_paths, invalid_hash_paths = validate_hash_paths(hash_paths)
-
 	for valid_hash_path in valid_hash_paths:
 		valid_hash_file_name, _ = os.path.splitext(os.path.basename(valid_hash_path))
 		logger.debug(wording.get('validating_hash_succeed').format(hash_file_name = valid_hash_file_name), __name__)
@@ -120,10 +110,8 @@ def conditional_download_sources(download_directory_path : str, sources : Downlo
 def validate_hash_paths(hash_paths : List[str]) -> Tuple[List[str], List[str]]:
 	valid_hash_paths = []
 	invalid_hash_paths = []
-	
 
 	for hash_path in hash_paths:
-		#print('validate hash paths', hash_path)
 		if is_file(hash_path):
 			valid_hash_paths.append(hash_path)
 		else:

@@ -140,6 +140,8 @@ WORDING : Dict[str, Any] =\
 		'processors': 'load a single or multiple processors (choices: {choices}, ...)',
 		'age_modifier_model': 'choose the model responsible for aging the face',
 		'age_modifier_direction': 'specify the direction in which the age should be modified',
+		'download_fran_model_first': 'Please download the FRAN model first',
+		'download_fran_masks_first': 'Please download the FRAN masks first',
 		'expression_restorer_model': 'choose the model responsible for restoring the expression',
 		'expression_restorer_factor': 'restore factor of expression from the target face',
 		'face_debugger_items': 'load a single or multiple processors (choices: {choices})',
