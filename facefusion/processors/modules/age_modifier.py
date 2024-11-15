@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 from typing import Any, List
 
 import cv2
-import numpy
+import numpy as np
 from cv2.typing import Size
 from numpy.typing import NDArray
 import onnxruntime
@@ -268,60 +268,48 @@ def sliding_window_tensor(input_tensor, window_size, stride, your_model, mask, s
     return output_tensor.cpu()
 
 
-def apply_fran_re_aging(input_tensor, window_size, stride, onnx_model_path, mask, small_mask):
-	"""
-	Apply aging operation on input tensor using a sliding-window method with an ONNX model.
-	"""
-	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-	start_total = time.time()
+def apply_fran_re_aging(input_array, window_size, stride, mask_array, small_mask_array):
+    """
+    Optimized version to apply aging operation using a sliding-window method with an ONNX model, using NumPy arrays.
+    """
+    start_total = time.time()
+    age_modifier = get_inference_pool().get("age_modifier")
 
-	input_tensor = input_tensor.to(device)  # Déplacer sur CPU pour le traitement ONNX
-	mask = mask.to(device)
-	small_mask = small_mask.to(device)
+    n, c, h, w = input_array.shape
+    output_array = np.zeros((n, 3, h, w), dtype=input_array.dtype)
+    count_array = np.zeros((n, 3, h, w), dtype=np.float32)
+    add = 2 if window_size % stride != 0 else 1
 
-	# ort_session = onnxruntime.InferenceSession(onnx_model_path)
-	ort_session = get_inference_pool().get("age_modifier")
+    for y in range(0, h - window_size + add, stride):
+        for x in range(0, w - window_size + add, stride):
+            window = input_array[:, :, y:y + window_size, x:x + window_size]
 
-	n, c, h, w = input_tensor.size()
-	output_tensor = torch.zeros((n, 3, h, w), dtype=input_tensor.dtype, device=device)
-	count_tensor = torch.zeros((n, 3, h, w), dtype=torch.float32, device=device)
-	add = 2 if window_size % stride != 0 else 1
+            # ONNX inference
+            age_modifier_inputs = {'input': window}
+            with thread_semaphore():
+                output_onnx = age_modifier.run(None, age_modifier_inputs)[0]
 
-	for y in range(0, h - window_size + add, stride):
-		for x in range(0, w - window_size + add, stride):
-			window = input_tensor[:, :, y:y + window_size, x:x + window_size]
+            output_array[:, :, y:y + window_size, x:x + window_size] += output_onnx * small_mask_array
+            count_array[:, :, y:y + window_size, x:x + window_size] += small_mask_array
 
-			# Convert window to numpy array
-			input_variable = window.cpu().numpy()
+    count_array = np.clip(count_array, a_min=1.0, a_max=None)
 
-			# ONNX inference
-			
-			start = time.time()
-			age_modifier_inputs = {'input': input_variable}
-			with thread_semaphore():
-				output_onnx = ort_session.run(None, age_modifier_inputs)[0]
-			output = torch.tensor(output_onnx)
-			print('onnx inference time (s) : ', time.time()-start)
+    # Average the overlapping regions
+    output_array /= count_array
 
-			output_tensor[:, :, y:y + window_size, x:x + window_size] += output * small_mask
-			count_tensor[:, :, y:y + window_size, x:x + window_size] += small_mask
+    # Apply mask
+    output_array *= mask_array
 
-	count_tensor = torch.clamp(count_tensor, min=1.0)
+    print('TOTAL inference time (s) : ', time.time() - start_total)
 
-	print('TOTAL inference time (s) : ', time.time()-start_total)
+    return output_array
 
-	# Average the overlapping regions
-	output_tensor /= count_tensor
-
-	# Apply mask
-	output_tensor *= mask
-
-	return output_tensor.cpu()
 
 
 def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
 	
 	age_modifier_model = state_manager.get_item('age_modifier_model')
+	print(age_modifier_model)
 	
 	if age_modifier_model == 'fran':
 		# get model and masks used for the sliding_windows
@@ -338,14 +326,13 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		unet_model.eval() # Set the model to evaluation mode
 
 		# Load mask, convert it to grayscale, and normalize its pixel values to the range [0, 1].
-		mask_file = torch.from_numpy(numpy.array(Image.open(mask_path).convert('L'))) / 255
-		small_mask_file = torch.from_numpy(numpy.array(Image.open(small_mask_path).convert('L'))) / 255
+		mask_file = torch.from_numpy(np.array(Image.open(mask_path).convert('L'))) / 255
+		small_mask_file = torch.from_numpy(np.array(Image.open(small_mask_path).convert('L'))) / 255
 		
 		image = temp_vision_frame.copy()
 		image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # Convert the image from BGR (OpenCV default) to RGB format.
 
 		# calculate margins
-		print(target_face.bounding_box)
 		margin_y_t = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .63 * .85)  # Calculate the top margin to extend above the face for better coverage.
 		margin_y_b = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .37 * .85)  # Calculate the bottom margin.
 		margin_x = int((target_face.bounding_box[2] - target_face.bounding_box[0]) // (2 / .85))  # Calculate the horizontal margin for a square crop.
@@ -387,63 +374,60 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		image = torch.clamp(image, 0, 1)  # Clamp the pixel values to ensure they are in the valid range [0, 1].
 
 		# Convert the tensor back to a NumPy array and transform it to BGR color space for display or further processing.
-		paste_vision_frame =  cv2.cvtColor(numpy.transpose((image.numpy()*255).astype(numpy.uint8), (1, 2, 0)), cv2.COLOR_RGB2BGR)
+		paste_vision_frame =  cv2.cvtColor(np.transpose((image.numpy()*255).astype(np.uint8), (1, 2, 0)), cv2.COLOR_RGB2BGR)
 	
 	elif age_modifier_model == 'fran_onnx':
-		# get model and masks used for the sliding_window
-		onnx_model_path = get_model_options().get("sources").get('age_modifier').get('path')
+		# Load model options and masks
 		mask_path = get_model_options().get('masks').get("mask").get("path")
 		small_mask_path = get_model_options().get('masks').get("small_mask").get("path")
 		input_size = get_model_options().get('size')  # (1024, 1024)
+		window_size = get_model_options().get('window_size') # 512 
+		stride = state_manager.get_item('age_modifier_stride')
 
-		mask_file = torch.from_numpy(numpy.array(Image.open(mask_path).convert('L'))) / 255
-		small_mask_file = torch.from_numpy(numpy.array(Image.open(small_mask_path).convert('L'))) / 255
+		# Load and normalize masks using NumPy
+		mask_array = np.array(Image.open(mask_path).convert('L'), dtype=np.float32) / 255
+		small_mask_array = np.array(Image.open(small_mask_path).convert('L'), dtype=np.float32) / 255
 
-		image = temp_vision_frame.copy()
-		image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+		# Load and preprocess image
+		image = cv2.cvtColor(temp_vision_frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255  # Normalize to [0, 1]
 
-		# calculate margins
+		# Calculate margins and crop
+		print("target_face.bounding_box", target_face.bounding_box)
 		margin_y_t = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .63 * .85)
 		margin_y_b = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .37 * .85)
 		margin_x = int((target_face.bounding_box[2] - target_face.bounding_box[0]) // (2 / .85))
 		margin_y_t += 2 * margin_x - margin_y_t - margin_y_b
 
-		l_y = int(max([target_face.bounding_box[1] - margin_y_t, 0]))
-		r_y = int(min([target_face.bounding_box[3] + margin_y_b, image.shape[0]]))
-		l_x = int(max([target_face.bounding_box[0] - margin_x, 0]))
-		r_x = int(min([target_face.bounding_box[2] + margin_x, image.shape[1]]))
+		l_y = int(max([target_face.bounding_box[1] - margin_y_t, 0]))  # Determine the top boundary of the crop, ensuring it doesn't go below zero.
+		r_y = int(min([target_face.bounding_box[3] + margin_y_b, image.shape[0]]))  # Determine the bottom boundary, ensuring it stays within the image height.
+		l_x = int(max([target_face.bounding_box[0] - margin_x, 0]))  # Determine the left boundary of the crop.
+		r_x = int(min([target_face.bounding_box[2] + margin_x, image.shape[1]]))  # Determine the right boundary.
 
-		# crop image
-		cropped_image = image[l_y:r_y, l_x:r_x, :]
-		orig_size = cropped_image.shape[:2]
+		cropped_image = image[l_y:r_y, l_x:r_x]
 
-		cropped_image = transforms.ToTensor()(cropped_image)
-		cropped_image_resized = transforms.Resize(input_size, interpolation=Image.BILINEAR, antialias=True)(cropped_image)
+		# Resize using OpenCV
+		cropped_image_resized = cv2.resize(cropped_image, input_size, interpolation=cv2.INTER_LINEAR)
+		cropped_image_resized = np.transpose(cropped_image_resized, (2, 0, 1))  # Convert to [C, H, W]
 
+		# Prepare input array
 		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else 20
 		target_age = state_manager.get_item('age_modifier_target_age') if state_manager.get_item('age_modifier_target_age') else 80
 
-		source_age_channel = torch.full_like(cropped_image_resized[:1, :, :], source_age / 100)
-		target_age_channel = torch.full_like(cropped_image_resized[:1, :, :], target_age / 100)
-		input_tensor = torch.cat([cropped_image_resized, source_age_channel, target_age_channel], dim=0).unsqueeze(0)
+		source_age_channel = np.full_like(cropped_image_resized[:1, :, :], source_age / 100)
+		target_age_channel = np.full_like(cropped_image_resized[:1, :, :], target_age / 100)
+		input_array = np.concatenate([cropped_image_resized, source_age_channel, target_age_channel], axis=0)[np.newaxis, ...]
 
-		image = transforms.ToTensor()(image)
+		aged_cropped_image = apply_fran_re_aging(input_array, window_size, stride, mask_array, small_mask_array)
 
-		window_size = 512
-		stride = state_manager.get_item('age_modifier_stride')
+		# Resize back to original size using OpenCV
+		aged_cropped_image_resized = cv2.resize(np.transpose(aged_cropped_image[0], (1, 2, 0)), (r_x - l_x, r_y - l_y), interpolation=cv2.INTER_LINEAR)
 
-		# Using the sliding window function with ONNX model
-		aged_cropped_image = apply_fran_re_aging(input_tensor, window_size, stride, onnx_model_path, mask=mask_file, small_mask=small_mask_file)
-		
-		# Resize back to original size
-		aged_cropped_image_resized = transforms.Resize(orig_size, interpolation=Image.BILINEAR, antialias=True)(
-			aged_cropped_image)
+		# Reapply to original image
+		image[l_y:r_y, l_x:r_x] += aged_cropped_image_resized
+		image = np.clip(image, 0, 1)
 
-		# Re-apply
-		image[:, l_y:r_y, l_x:r_x] += aged_cropped_image_resized.squeeze(0)
-		image = torch.clamp(image, 0, 1)
-
-		paste_vision_frame = cv2.cvtColor(numpy.transpose((image.numpy() * 255).astype(numpy.uint8), (1, 2, 0)), cv2.COLOR_RGB2BGR)
+		# Convert to final output format
+		paste_vision_frame = cv2.cvtColor((image * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
 		
 	
 	else:
@@ -473,7 +457,7 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		extend_vision_frame = forward(crop_vision_frame, extend_vision_frame)
 		extend_vision_frame = normalize_extend_frame(extend_vision_frame)
 		extend_vision_frame = fix_color(extend_vision_frame_raw, extend_vision_frame)
-		extend_crop_mask = cv2.pyrUp(numpy.minimum.reduce(crop_masks).clip(0, 1))
+		extend_crop_mask = cv2.pyrUp(np.minimum.reduce(crop_masks).clip(0, 1))
 		extend_affine_matrix *= extend_vision_frame.shape[0] / 512
 		paste_vision_frame = paste_back(temp_vision_frame, extend_vision_frame, extend_crop_mask, extend_affine_matrix)
 
@@ -502,15 +486,15 @@ def forward(crop_vision_frame : VisionFrame, extend_vision_frame : VisionFrame) 
 def fix_color(extend_vision_frame_raw : VisionFrame, extend_vision_frame : VisionFrame) -> VisionFrame:
 	color_difference = compute_color_difference(extend_vision_frame_raw, extend_vision_frame, (48, 48))
 	color_difference_mask = create_static_box_mask(extend_vision_frame.shape[:2][::-1], 1.0, (0, 0, 0, 0))
-	color_difference_mask = numpy.stack((color_difference_mask, ) * 3, axis = -1)
+	color_difference_mask = np.stack((color_difference_mask, ) * 3, axis = -1)
 	extend_vision_frame = normalize_color_difference(color_difference, color_difference_mask, extend_vision_frame)
 	return extend_vision_frame
 
 
 def compute_color_difference(extend_vision_frame_raw : VisionFrame, extend_vision_frame : VisionFrame, size : Size) -> VisionFrame:
-	extend_vision_frame_raw = extend_vision_frame_raw.astype(numpy.float32) / 255
+	extend_vision_frame_raw = extend_vision_frame_raw.astype(np.float32) / 255
 	extend_vision_frame_raw = cv2.resize(extend_vision_frame_raw, size, interpolation = cv2.INTER_AREA)
-	extend_vision_frame = extend_vision_frame.astype(numpy.float32) / 255
+	extend_vision_frame = extend_vision_frame.astype(np.float32) / 255
 	extend_vision_frame = cv2.resize(extend_vision_frame, size, interpolation = cv2.INTER_AREA)
 	color_difference = extend_vision_frame_raw - extend_vision_frame
 	return color_difference
@@ -519,31 +503,31 @@ def compute_color_difference(extend_vision_frame_raw : VisionFrame, extend_visio
 def normalize_color_difference(color_difference : VisionFrame, color_difference_mask : Mask, extend_vision_frame : VisionFrame) -> VisionFrame:
 	color_difference = cv2.resize(color_difference, extend_vision_frame.shape[:2][::-1], interpolation = cv2.INTER_CUBIC)
 	color_difference_mask = 1 - color_difference_mask.clip(0, 0.75)
-	extend_vision_frame = extend_vision_frame.astype(numpy.float32) / 255
+	extend_vision_frame = extend_vision_frame.astype(np.float32) / 255
 	extend_vision_frame += color_difference * color_difference_mask
 	extend_vision_frame = extend_vision_frame.clip(0, 1)
-	extend_vision_frame = numpy.multiply(extend_vision_frame, 255).astype(numpy.uint8)
+	extend_vision_frame = np.multiply(extend_vision_frame, 255).astype(np.uint8)
 	return extend_vision_frame
 
 
 def prepare_direction(direction : int) -> NDArray[Any]:
-	direction = numpy.interp(float(direction), [ -100, 100 ], [ 2.5, -2.5 ]) #type:ignore[assignment]
-	return numpy.array(direction).astype(numpy.float32)
+	direction = np.interp(float(direction), [ -100, 100 ], [ 2.5, -2.5 ]) #type:ignore[assignment]
+	return np.array(direction).astype(np.float32)
 
 
 def prepare_vision_frame(vision_frame : VisionFrame) -> VisionFrame:
 	vision_frame = vision_frame[:, :, ::-1] / 255.0
 	vision_frame = (vision_frame - 0.5) / 0.5
-	vision_frame = numpy.expand_dims(vision_frame.transpose(2, 0, 1), axis = 0).astype(numpy.float32)
+	vision_frame = np.expand_dims(vision_frame.transpose(2, 0, 1), axis = 0).astype(np.float32)
 	return vision_frame
 
 
 def normalize_extend_frame(extend_vision_frame : VisionFrame) -> VisionFrame:
-	extend_vision_frame = numpy.clip(extend_vision_frame, -1, 1)
+	extend_vision_frame = np.clip(extend_vision_frame, -1, 1)
 	extend_vision_frame = (extend_vision_frame + 1) / 2
 	extend_vision_frame = extend_vision_frame.transpose(1, 2, 0).clip(0, 255)
 	extend_vision_frame = (extend_vision_frame * 255.0)
-	extend_vision_frame = extend_vision_frame.astype(numpy.uint8)[:, :, ::-1]
+	extend_vision_frame = extend_vision_frame.astype(np.uint8)[:, :, ::-1]
 	extend_vision_frame = cv2.pyrDown(extend_vision_frame)
 	return extend_vision_frame
 
