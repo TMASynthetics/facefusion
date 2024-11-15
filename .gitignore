@@ -12,6 +12,7 @@ data/*
 ear_masking/models/*
 ear_masking/weights/*
 notebooks/*
+.jobs
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
