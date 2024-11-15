@@ -68,6 +68,7 @@ MODEL_SET : ModelSet =\
 			}
 		},
 		'template': 'ffhq_1024',
+		'window_size': 512,
 		'size': (1024, 1024)
 	},
 	'fran_onnx':
@@ -267,51 +268,55 @@ def sliding_window_tensor(input_tensor, window_size, stride, your_model, mask, s
     return output_tensor.cpu()
 
 
-def sliding_window_tensor_onnx(input_tensor, window_size, stride, onnx_model_path, mask, small_mask):
-    """
-    Apply aging operation on input tensor using a sliding-window method with an ONNX model.
-    """
-    start_total = time.time()
+def apply_fran_re_aging(input_tensor, window_size, stride, onnx_model_path, mask, small_mask):
+	"""
+	Apply aging operation on input tensor using a sliding-window method with an ONNX model.
+	"""
+	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+	start_total = time.time()
 
-    input_tensor = input_tensor.to('cpu')  # Déplacer sur CPU pour le traitement ONNX
-    mask = mask.to('cpu')
-    small_mask = small_mask.to('cpu')
+	input_tensor = input_tensor.to(device)  # Déplacer sur CPU pour le traitement ONNX
+	mask = mask.to(device)
+	small_mask = small_mask.to(device)
 
-    ort_session = onnxruntime.InferenceSession(onnx_model_path)
+	# ort_session = onnxruntime.InferenceSession(onnx_model_path)
+	ort_session = get_inference_pool().get("age_modifier")
 
-    n, c, h, w = input_tensor.size()
-    output_tensor = torch.zeros((n, 3, h, w), dtype=input_tensor.dtype, device='cpu')
-    count_tensor = torch.zeros((n, 3, h, w), dtype=torch.float32, device='cpu')
-    add = 2 if window_size % stride != 0 else 1
+	n, c, h, w = input_tensor.size()
+	output_tensor = torch.zeros((n, 3, h, w), dtype=input_tensor.dtype, device=device)
+	count_tensor = torch.zeros((n, 3, h, w), dtype=torch.float32, device=device)
+	add = 2 if window_size % stride != 0 else 1
 
-    for y in range(0, h - window_size + add, stride):
-        for x in range(0, w - window_size + add, stride):
-            window = input_tensor[:, :, y:y + window_size, x:x + window_size]
+	for y in range(0, h - window_size + add, stride):
+		for x in range(0, w - window_size + add, stride):
+			window = input_tensor[:, :, y:y + window_size, x:x + window_size]
 
-            # Convert window to numpy array
-            input_variable = window.cpu().numpy()
+			# Convert window to numpy array
+			input_variable = window.cpu().numpy()
 
-            # ONNX inference
-            with torch.no_grad():
-                start = time.time()
-                output_onnx = ort_session.run(None, {'input': input_variable})[0]
-                output = torch.tensor(output_onnx)
-                print('onnx inference time (s) : ', time.time()-start)
+			# ONNX inference
+			
+			start = time.time()
+			age_modifier_inputs = {'input': input_variable}
+			with thread_semaphore():
+				output_onnx = ort_session.run(None, age_modifier_inputs)[0]
+			output = torch.tensor(output_onnx)
+			print('onnx inference time (s) : ', time.time()-start)
 
-            output_tensor[:, :, y:y + window_size, x:x + window_size] += output * small_mask
-            count_tensor[:, :, y:y + window_size, x:x + window_size] += small_mask
+			output_tensor[:, :, y:y + window_size, x:x + window_size] += output * small_mask
+			count_tensor[:, :, y:y + window_size, x:x + window_size] += small_mask
 
-    count_tensor = torch.clamp(count_tensor, min=1.0)
+	count_tensor = torch.clamp(count_tensor, min=1.0)
 
-    print('TOTAL inference time (s) : ', time.time()-start_total)
+	print('TOTAL inference time (s) : ', time.time()-start_total)
 
-    # Average the overlapping regions
-    output_tensor /= count_tensor
+	# Average the overlapping regions
+	output_tensor /= count_tensor
 
-    # Apply mask
-    output_tensor *= mask
+	# Apply mask
+	output_tensor *= mask
 
-    return output_tensor.cpu()
+	return output_tensor.cpu()
 
 
 def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
@@ -324,59 +329,64 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		mask_path = get_model_options().get('masks').get("mask").get("path")
 		small_mask_path = get_model_options().get('masks').get("small_mask").get("path")
 		input_size = get_model_options().get('size') # (1024, 1024)
+		window_size = get_model_options().get('window_size') # 512 
+		stride = state_manager.get_item('age_modifier_stride')
 
 		device = torch.device("cuda:0" if torch.cuda.is_available() else "mps")
 		unet_model = UNet().to(device)
 		unet_model.load_state_dict(torch.load(fran_model_path, map_location=device))
-		unet_model.eval()
+		unet_model.eval() # Set the model to evaluation mode
+
+		# Load mask, convert it to grayscale, and normalize its pixel values to the range [0, 1].
 		mask_file = torch.from_numpy(numpy.array(Image.open(mask_path).convert('L'))) / 255
 		small_mask_file = torch.from_numpy(numpy.array(Image.open(small_mask_path).convert('L'))) / 255
 		
 		image = temp_vision_frame.copy()
-		image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+		image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # Convert the image from BGR (OpenCV default) to RGB format.
 
 		# calculate margins
-		margin_y_t = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .63 * .85)  # larger as the forehead is often cut off
-		margin_y_b = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .37 * .85)
-		margin_x = int((target_face.bounding_box[2] - target_face.bounding_box[0]) // (2 / .85))
-		margin_y_t += 2 * margin_x - margin_y_t - margin_y_b  # make sure square is preserved
+		print(target_face.bounding_box)
+		margin_y_t = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .63 * .85)  # Calculate the top margin to extend above the face for better coverage.
+		margin_y_b = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .37 * .85)  # Calculate the bottom margin.
+		margin_x = int((target_face.bounding_box[2] - target_face.bounding_box[0]) // (2 / .85))  # Calculate the horizontal margin for a square crop.
+		margin_y_t += 2 * margin_x - margin_y_t - margin_y_b  # Adjust the top margin to ensure a square crop.
 
-		l_y = int(max([target_face.bounding_box[1] - margin_y_t, 0]))
-		r_y = int(min([target_face.bounding_box[3] + margin_y_b, image.shape[0]]))
-		l_x = int(max([target_face.bounding_box[0] - margin_x, 0]))
-		r_x = int(min([target_face.bounding_box[2] + margin_x, image.shape[1]]))
+		l_y = int(max([target_face.bounding_box[1] - margin_y_t, 0]))  # Determine the top boundary of the crop, ensuring it doesn't go below zero.
+		r_y = int(min([target_face.bounding_box[3] + margin_y_b, image.shape[0]]))  # Determine the bottom boundary, ensuring it stays within the image height.
+		l_x = int(max([target_face.bounding_box[0] - margin_x, 0]))  # Determine the left boundary of the crop.
+		r_x = int(min([target_face.bounding_box[2] + margin_x, image.shape[1]]))  # Determine the right boundary.
 
-		# crop image
+		# Crop the image to the computed boundaries
 		cropped_image = image[l_y:r_y, l_x:r_x, :]
 		# Resizing
-		orig_size = cropped_image.shape[:2]
+		orig_size = cropped_image.shape[:2]  # Save the original size of the cropped image.
 
-		cropped_image = transforms.ToTensor()(cropped_image)
-		cropped_image_resized = transforms.Resize(input_size, interpolation=Image.BILINEAR, antialias=True)(cropped_image)
+		cropped_image = transforms.ToTensor()(cropped_image)  # Convert the cropped image to a PyTorch tensor.
+		cropped_image_resized = transforms.Resize(input_size, interpolation=Image.BILINEAR, antialias=True)(cropped_image)  # Resize the image to the specified input size using bilinear interpolation.
 
-		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else 20
+		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else 20  # Default source age to 20 if not provided.
 		target_age = state_manager.get_item('age_modifier_target_age') if state_manager.get_item('age_modifier_target_age') else 80
 
+		# Create channels representing the source and target ages as normalized tensors
 		source_age_channel = torch.full_like(cropped_image_resized[:1, :, :], source_age / 100)
 		target_age_channel = torch.full_like(cropped_image_resized[:1, :, :], target_age / 100)
 		input_tensor = torch.cat([cropped_image_resized, source_age_channel, target_age_channel], dim=0).unsqueeze(0)
 
-		image = transforms.ToTensor()(image)
+		image = transforms.ToTensor()(image)  # Convert the original image to a PyTorch tensor.
 
-		# performing actions on image
-		window_size = 512
-		stride = state_manager.get_item('age_modifier_stride')
-
+		# Perform the aging transformation on the cropped image using a sliding window approach
 		aged_cropped_image = sliding_window_tensor(input_tensor, window_size, stride, unet_model, mask=mask_file, small_mask=small_mask_file)
 		
-		# resize back to original size
+		# Resize the transformed image back to its original size
 		aged_cropped_image_resized = transforms.Resize(orig_size, interpolation=Image.BILINEAR, antialias=True)(
 			aged_cropped_image)
 
-		# re-apply
+		# Apply the modified image back to the original image
 		image[:, l_y:r_y, l_x:r_x] += aged_cropped_image_resized.squeeze(0)
 
-		image = torch.clamp(image, 0, 1)
+		image = torch.clamp(image, 0, 1)  # Clamp the pixel values to ensure they are in the valid range [0, 1].
+
+		# Convert the tensor back to a NumPy array and transform it to BGR color space for display or further processing.
 		paste_vision_frame =  cv2.cvtColor(numpy.transpose((image.numpy()*255).astype(numpy.uint8), (1, 2, 0)), cv2.COLOR_RGB2BGR)
 	
 	elif age_modifier_model == 'fran_onnx':
@@ -423,7 +433,7 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		stride = state_manager.get_item('age_modifier_stride')
 
 		# Using the sliding window function with ONNX model
-		aged_cropped_image = sliding_window_tensor_onnx(input_tensor, window_size, stride, onnx_model_path, mask=mask_file, small_mask=small_mask_file)
+		aged_cropped_image = apply_fran_re_aging(input_tensor, window_size, stride, onnx_model_path, mask=mask_file, small_mask=small_mask_file)
 		
 		# Resize back to original size
 		aged_cropped_image_resized = transforms.Resize(orig_size, interpolation=Image.BILINEAR, antialias=True)(
