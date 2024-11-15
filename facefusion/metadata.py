@@ -2,12 +2,12 @@ from typing import Optional
 
 METADATA =\
 {
-	'name': 'FaceFusion',
-	'description': 'Industry leading face manipulation platform',
-	'version': '3.0.1',
-	'license': 'MIT',
-	'author': 'Henry Ruhs',
-	'url': 'https://facefusion.io'
+	'name': 'TMA Synthetics - Face Services',
+	# 'description': 'Industry leading face manipulation platform',
+	'version': '1.0',
+	# 'license': 'MIT',
+	# 'author': 'Henry Ruhs',
+	# 'url': 'https://facefusion.io'  
 }
 
 

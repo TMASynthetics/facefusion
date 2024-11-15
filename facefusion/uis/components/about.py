@@ -15,17 +15,17 @@ def render() -> None:
 
 	action = random.choice(
 	[
-		{
-			'wording': wording.get('about.become_a_member'),
-			'url': 'https://subscribe.facefusion.io'
-		},
-		{
-			'wording': wording.get('about.join_our_community'),
-			'url': 'https://join.facefusion.io'
-		},
+		# {
+		# 	'wording': wording.get('about.become_a_member'),
+		# 	'url': 'https://subscribe.facefusion.io'
+		# },
+		# {
+		# 	'wording': wording.get('about.join_our_community'),
+		# 	'url': 'https://join.facefusion.io'
+		# },
 		{
 			'wording': wording.get('about.read_the_documentation'),
-			'url': 'https://docs.facefusion.io'
+			'url': 'https://jwsite.sharepoint.com/:f:/s/WHQ-MEPS-TMASyntheticMedia-Team/Esu5GnUTxcZNnTcnl4vKnt4BWZp-bHTZ4K9tEJD4EdNt9A?e=59OzJJ'
 		}
 	])
 
