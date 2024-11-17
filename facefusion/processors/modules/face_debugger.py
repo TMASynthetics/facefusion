@@ -78,6 +78,7 @@ def debug_face(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 
 	if 'bounding-box' in face_debugger_items:
 		x1, y1, x2, y2 = bounding_box
+		print("face_debugger.bounding_box", bounding_box)
 		cv2.rectangle(temp_vision_frame, (x1, y1), (x2, y2), primary_color, 2)
 
 		if target_face.angle == 0:

@@ -103,6 +103,7 @@ MODEL_SET : ModelSet =\
 			}
 		},
 		'template': 'ffhq_1024',
+		'window_size': 512,
 		'size': (1024, 1024)
 	},
     
@@ -152,10 +153,11 @@ def register_args(program : ArgumentParser) -> None:
 		group_processors.add_argument('--age-modifier-model', help = wording.get('help.age_modifier_model'), default = config.get_str_value('processors.age_modifier_model', 'fran'), choices = processors_choices.age_modifier_models)
 		group_processors.add_argument('--age-modifier-direction', help = wording.get('help.age_modifier_direction'), type = int, default = config.get_int_value('processors.age_modifier_direction', '0'), choices = processors_choices.age_modifier_direction_range, metavar = create_int_metavar(processors_choices.age_modifier_direction_range))
 		group_processors.add_argument('--age-modifier-source-age', help = wording.get('help.age_modifier_source_age'), type = int, default = config.get_int_value('processors.age_modifier_source_age', '20'), choices = processors_choices.age_modifier_source_age_range, metavar = create_int_metavar(processors_choices.age_modifier_source_age_range))
-		group_processors.add_argument('--age-modifier-target-age', help = wording.get('help.age_modifier_target_age'), type = int, default = config.get_int_value('processors.age_modifier_target_age', '80'), choices = processors_choices.age_modifier_target_age_range, metavar = create_int_metavar(processors_choices.age_modifier_target_age_range))
-		group_processors.add_argument('--age-modifier-stride', help = wording.get('help.age_modifier_source_age'), type = int, default = 256)#
+		group_processors.add_argument('--age-modifier-target-age', help = wording.get('help.age_modifier_target_age'), type = int, default = config.get_int_value('processors.age_modifier_target_age', '70'), choices = processors_choices.age_modifier_target_age_range, metavar = create_int_metavar(processors_choices.age_modifier_target_age_range))
+		group_processors.add_argument('--age-modifier-stride', help = wording.get('help.age_modifier_source_age'), type = int, default = 256) 
+		group_processors.add_argument('--age-modifier-mask-type', type = str, default = "FRAN") 
 
-		facefusion.jobs.job_store.register_step_keys([ 'age_modifier_model', 'age_modifier_direction', 'age_modifier_source_age','age_modifier_target_age', 'age_modifier_stride' ])
+		facefusion.jobs.job_store.register_step_keys([ 'age_modifier_model', 'age_modifier_direction', 'age_modifier_source_age','age_modifier_target_age', 'age_modifier_stride', 'age_modifier_mask_type' ])
 
 
 def apply_args(args : Args, apply_state_item : ApplyStateItem) -> None:
@@ -164,6 +166,13 @@ def apply_args(args : Args, apply_state_item : ApplyStateItem) -> None:
 	apply_state_item('age_modifier_source_age', args.get('age_modifier_source_age'))
 	apply_state_item('age_modifier_target_age', args.get('age_modifier_target_age'))
 	apply_state_item('age_modifier_stride', args.get('age_modifier_stride'))
+	apply_state_item('age_modifier_mask_type', args.get('age_modifier_mask_type'))
+	print(state_manager.get_item('age_modifier_model'))
+	print(state_manager.get_item('age_modifier_direction'))
+	print(state_manager.get_item('age_modifier_source_age'))
+	print(state_manager.get_item('age_modifier_target_age'))
+	print(state_manager.get_item('age_modifier_stride'))
+	print(state_manager.get_item('age_modifier_mask_type'))
 
 
 def pre_check() -> bool:
@@ -333,15 +342,44 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # Convert the image from BGR (OpenCV default) to RGB format.
 
 		# calculate margins
-		margin_y_t = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .63 * .85)  # Calculate the top margin to extend above the face for better coverage.
-		margin_y_b = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .37 * .85)  # Calculate the bottom margin.
-		margin_x = int((target_face.bounding_box[2] - target_face.bounding_box[0]) // (2 / .85))  # Calculate the horizontal margin for a square crop.
-		margin_y_t += 2 * margin_x - margin_y_t - margin_y_b  # Adjust the top margin to ensure a square crop.
+		print("target_face.bounding_box", target_face.bounding_box)
+		print("face_mask_padding", state_manager.get_item("face_mask_padding"))
+		print("mask_type", state_manager.get_item('age_modifier_mask_type'))
 
-		l_y = int(max([target_face.bounding_box[1] - margin_y_t, 0]))  # Determine the top boundary of the crop, ensuring it doesn't go below zero.
-		r_y = int(min([target_face.bounding_box[3] + margin_y_b, image.shape[0]]))  # Determine the bottom boundary, ensuring it stays within the image height.
-		l_x = int(max([target_face.bounding_box[0] - margin_x, 0]))  # Determine the left boundary of the crop.
-		r_x = int(min([target_face.bounding_box[2] + margin_x, image.shape[1]]))  # Determine the right boundary.
+		primary_color = (0, 0, 255)
+		primary_light_color = (100, 100, 255)
+		secondary_color = (0, 255, 0)
+		tertiary_color = (255, 255, 0)
+
+		x1, y1, x2, y2 = target_face.bounding_box
+		
+		face_mask_padding = state_manager.get_item("face_mask_padding") # top, right, bottom, left
+		x1 += face_mask_padding[3]
+		y1 += face_mask_padding[0]
+		x2 += face_mask_padding[1]
+		y2 += face_mask_padding[2]
+
+		if "CUSTOM" in state_manager.get_item('age_modifier_mask_type'):
+			cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), secondary_color, 2)
+		
+		margin_y_t = int((y2 - y1) * .63 * .85)  # Calculate the top margin to extend above the face for better coverage.
+		margin_y_b = int((y2 - y1) * .37 * .85)  # Calculate the bottom margin.
+		margin_x = int((x2 - x1) // (2 / .85))  # Calculate the horizontal margin for a square crop.
+		margin_y_t += 2 * margin_x - margin_y_t - margin_y_b  # Adjust the top margin to ensure a square crop.
+		
+
+		l_y = int(max([y1 - margin_y_t, 0]))  # Determine the top boundary of the crop, ensuring it doesn't go below zero.
+		r_y = int(min([y2 + margin_y_b, image.shape[0]]))  # Determine the bottom boundary, ensuring it stays within the image height.
+		l_x = int(max([x1 - margin_x, 0]))  # Determine the left boundary of the crop.
+		r_x = int(min([x2 + margin_x, image.shape[1]]))  # Determine the right boundary.
+	
+		# print rectangle to see the cropping rectangle
+		if "FRAN" in state_manager.get_item('age_modifier_mask_type'):
+			cv2.rectangle(image, (l_x, l_y), (r_x, r_y), primary_color, 2)
+		
+		print("cropped_region", l_x, l_y, r_x, r_y)
+		if "FRAN" not in state_manager.get_item('age_modifier_mask_type'):
+			l_x, l_y, r_x, r_y = int(x1), int(y1), int(x2), int(y2)
 
 		# Crop the image to the computed boundaries
 		cropped_image = image[l_y:r_y, l_x:r_x, :]
@@ -392,7 +430,6 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		image = cv2.cvtColor(temp_vision_frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255  # Normalize to [0, 1]
 
 		# Calculate margins and crop
-		print("target_face.bounding_box", target_face.bounding_box)
 		margin_y_t = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .63 * .85)
 		margin_y_b = int((target_face.bounding_box[3] - target_face.bounding_box[1]) * .37 * .85)
 		margin_x = int((target_face.bounding_box[2] - target_face.bounding_box[0]) // (2 / .85))
