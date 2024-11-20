@@ -14,7 +14,7 @@ AGE_MODIFIER_DIRECTION_SLIDER : Optional[gradio.Slider] = None
 AGE_MODIFIER_SOURCE_AGE_SLIDER : Optional[gradio.Slider] = None
 AGE_MODIFIER_TARGET_AGE_SLIDER : Optional[gradio.Slider] = None
 AGE_MODIFIER_STRIDE_SLIDER : Optional[gradio.Slider] = None
-AGE_MODIFIER_MASK_TYPE : Optional[gradio.Checkbox] = None
+AGE_MODIFIER_SHOW_MASK : Optional[gradio.Radio] = None
 
 def render() -> None:
 	global AGE_MODIFIER_MODEL_DROPDOWN
@@ -22,7 +22,7 @@ def render() -> None:
 	global AGE_MODIFIER_SOURCE_AGE_SLIDER
 	global AGE_MODIFIER_TARGET_AGE_SLIDER
 	global AGE_MODIFIER_STRIDE_SLIDER
-	global AGE_MODIFIER_MASK_TYPE
+	global AGE_MODIFIER_SHOW_MASK
 
 	AGE_MODIFIER_MODEL_DROPDOWN = gradio.Dropdown(
 		label = wording.get('uis.age_modifier_model_dropdown'),
@@ -62,10 +62,10 @@ def render() -> None:
 		maximum = processors_choices.age_modifier_stride_range[-1],
 		visible = 'age_modifier' in state_manager.get_item('processors') and 'fran' in state_manager.get_item('age_modifier_model')
 	)
-	AGE_MODIFIER_MASK_TYPE = gradio.CheckboxGroup(
-		label = wording.get('uis.age_modifier_mask_type'),
-		choices = ['FRAN', 'CUSTOM'],
-		value = 'FRAN', 
+	AGE_MODIFIER_SHOW_MASK = gradio.Radio(
+		label = wording.get('uis.age_modifier_show_mask'),
+		choices = ["Yes", "No"],
+		value = "No", 
 		visible = 'age_modifier' in state_manager.get_item('processors') and 'fran' in state_manager.get_item('age_modifier_model')
 	)
 
@@ -74,19 +74,19 @@ def render() -> None:
 	register_ui_component('age_modifier_source_age_slider', AGE_MODIFIER_SOURCE_AGE_SLIDER)
 	register_ui_component('age_modifier_target_age_slider', AGE_MODIFIER_TARGET_AGE_SLIDER)
 	register_ui_component('age_modifier_stride_slider', AGE_MODIFIER_STRIDE_SLIDER)
-	register_ui_component('age_modifier_mask_type', AGE_MODIFIER_MASK_TYPE)
+	register_ui_component('age_modifier_show_mask', AGE_MODIFIER_SHOW_MASK)
 
 def listen() -> None:
-	AGE_MODIFIER_MODEL_DROPDOWN.change(update_age_modifier_model, inputs = AGE_MODIFIER_MODEL_DROPDOWN, outputs = [ AGE_MODIFIER_MODEL_DROPDOWN, AGE_MODIFIER_DIRECTION_SLIDER, AGE_MODIFIER_SOURCE_AGE_SLIDER, AGE_MODIFIER_TARGET_AGE_SLIDER, AGE_MODIFIER_STRIDE_SLIDER, AGE_MODIFIER_MASK_TYPE ])
+	AGE_MODIFIER_MODEL_DROPDOWN.change(update_age_modifier_model, inputs = AGE_MODIFIER_MODEL_DROPDOWN, outputs = [ AGE_MODIFIER_MODEL_DROPDOWN, AGE_MODIFIER_DIRECTION_SLIDER, AGE_MODIFIER_SOURCE_AGE_SLIDER, AGE_MODIFIER_TARGET_AGE_SLIDER, AGE_MODIFIER_STRIDE_SLIDER, AGE_MODIFIER_SHOW_MASK ])
 	AGE_MODIFIER_DIRECTION_SLIDER.release(update_age_modifier_direction, inputs = AGE_MODIFIER_DIRECTION_SLIDER)
 	AGE_MODIFIER_SOURCE_AGE_SLIDER.release(update_age_modifier_source_age, inputs = AGE_MODIFIER_SOURCE_AGE_SLIDER)
 	AGE_MODIFIER_TARGET_AGE_SLIDER.release(update_age_modifier_target_age, inputs = AGE_MODIFIER_TARGET_AGE_SLIDER)
 	AGE_MODIFIER_STRIDE_SLIDER.release(update_age_modifier_stride, inputs = AGE_MODIFIER_STRIDE_SLIDER)
-	AGE_MODIFIER_MASK_TYPE.change(update_age_modifier_mask_type, inputs = AGE_MODIFIER_MASK_TYPE, outputs = AGE_MODIFIER_MASK_TYPE)
+	AGE_MODIFIER_SHOW_MASK.change(change_age_modifier_show_mask, inputs = AGE_MODIFIER_SHOW_MASK, outputs = AGE_MODIFIER_SHOW_MASK)
 
 	processors_checkbox_group = get_ui_component('processors_checkbox_group')
 	if processors_checkbox_group:
-		processors_checkbox_group.change(remote_update, inputs = processors_checkbox_group, outputs = [ AGE_MODIFIER_MODEL_DROPDOWN, AGE_MODIFIER_DIRECTION_SLIDER, AGE_MODIFIER_SOURCE_AGE_SLIDER, AGE_MODIFIER_TARGET_AGE_SLIDER, AGE_MODIFIER_STRIDE_SLIDER, AGE_MODIFIER_MASK_TYPE ])
+		processors_checkbox_group.change(remote_update, inputs = processors_checkbox_group, outputs = [ AGE_MODIFIER_MODEL_DROPDOWN, AGE_MODIFIER_DIRECTION_SLIDER, AGE_MODIFIER_SOURCE_AGE_SLIDER, AGE_MODIFIER_TARGET_AGE_SLIDER, AGE_MODIFIER_STRIDE_SLIDER, AGE_MODIFIER_SHOW_MASK ])
 
 
 def remote_update(processors : List[str]) -> Tuple[gradio.Dropdown, gradio.Slider, gradio.Slider, gradio.Slider, gradio.Slider, gradio.CheckboxGroup]:
@@ -125,6 +125,6 @@ def update_age_modifier_stride(age_modifier_stride : int) -> None:
 	state_manager.set_item('age_modifier_stride', int(age_modifier_stride))
 	
 
-def update_age_modifier_mask_type(age_modifier_mask : str) -> gradio.CheckboxGroup:
-	state_manager.set_item('age_modifier_mask_type', age_modifier_mask)
-	return gradio.CheckboxGroup(value = state_manager.get_item('age_modifier_mask_type'))
+def change_age_modifier_show_mask(age_modifier_show_mask : str) -> gradio.Radio:
+	state_manager.set_item('age_modifier_show_mask', age_modifier_show_mask)
+	return gradio.Radio(value = state_manager.get_item('age_modifier_show_mask'))

@@ -226,7 +226,7 @@ WORDING : Dict[str, Any] =\
 		'age_modifier_target_age_slider': 'AGE MODIFIER TARGET AGE',
 		'age_modifier_stride_slider': "CONVOLUTION STRIDE SIZE",
 		'age_modifier_model_dropdown': 'AGE MODIFIER MODEL',
-		'age_modifier_mask_type': 'AGE MODIFIER MASK TYPE',
+		'age_modifier_show_mask': 'AGE MODIFIER SHOW MASK',
 		'apply_button': 'APPLY',
 		'benchmark_cycles_slider': 'BENCHMARK CYCLES',
 		'benchmark_runs_checkbox_group': 'BENCHMARK RUNS',

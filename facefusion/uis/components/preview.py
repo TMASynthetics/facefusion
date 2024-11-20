@@ -104,7 +104,7 @@ def listen() -> None:
 		'frame_colorizer_size_dropdown',
 		'face_mask_types_checkbox_group',
 		'face_mask_regions_checkbox_group',
-		'age_modifier_mask_type'
+		'age_modifier_show_mask'
 	]):
 		ui_component.change(update_preview_image, inputs = PREVIEW_FRAME_SLIDER, outputs = PREVIEW_IMAGE)
 
