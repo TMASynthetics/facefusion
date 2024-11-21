@@ -1,11 +1,11 @@
 from argparse import ArgumentParser
 from typing import Any, List
-
-import cv2
 import numpy as np
+import cv2
 from cv2.typing import Size
 from numpy.typing import NDArray
-import onnxruntime
+from PIL import Image
+import time
 
 import facefusion.jobs.job_manager
 import facefusion.jobs.job_store
@@ -26,52 +26,10 @@ from facefusion.thread_helper import thread_semaphore
 from facefusion.typing import ApplyStateItem, Args, Face, InferencePool, Mask, ModelOptions, ModelSet, ProcessMode, QueuePayload, UpdateProgress, VisionFrame
 from facefusion.vision import read_image, read_static_image, write_image
 
-import os
-import torch
-from torch.autograd import Variable
-from torchvision import transforms
-from PIL import Image
-import time
-from facefusion.processors.models import UNet
 
 MODEL_SET : ModelSet =\
 {
 	'fran':
-	{
-		'hashes':
-		{
-			'age_modifier':
-			{
-				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/best_unet_model.hash',
-				'path': resolve_relative_path("../.assets/models/best_unet_model.hash"),
-			}
-		},
-		'sources':
-		{
-			'age_modifier':
-			{
-				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/best_unet_model.pth',
-				'path': resolve_relative_path("../.assets/models/best_unet_model.pth"),
-			},
-		},	
-		'masks':
-        {
-            'mask':
-			{	
-				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/mask1024.jpg',
-				'path': resolve_relative_path("../.assets/mask1024.jpg"),
-			},
-            'small_mask':
-			{
-				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/mask512.jpg',
-				'path': resolve_relative_path("../.assets/mask512.jpg"),
-			}
-		},
-		'template': 'ffhq_512',
-		'window_size': 512,
-		'size': (1024, 1024)
-	},
-	'fran_onnx':
 	{
 		'hashes':
 		{
@@ -156,9 +114,9 @@ def register_args(program : ArgumentParser) -> None:
 		group_processors.add_argument('--age-modifier-source-age', help = wording.get('help.age_modifier_source_age'), type = int, default = config.get_int_value('processors.age_modifier_source_age', '20'), choices = processors_choices.age_modifier_source_age_range, metavar = create_int_metavar(processors_choices.age_modifier_source_age_range))
 		group_processors.add_argument('--age-modifier-target-age', help = wording.get('help.age_modifier_target_age'), type = int, default = config.get_int_value('processors.age_modifier_target_age', '70'), choices = processors_choices.age_modifier_target_age_range, metavar = create_int_metavar(processors_choices.age_modifier_target_age_range))
 		group_processors.add_argument('--age-modifier-stride', help = wording.get('help.age_modifier_stride'), type = int, default = 256) 
-		group_processors.add_argument('--age-modifier-mask-type', type = str, default = "FRAN") 
+		group_processors.add_argument('--age-modifier-show-mask', type = str, default = "No") 
 
-		facefusion.jobs.job_store.register_step_keys([ 'age_modifier_model', 'age_modifier_direction', 'age_modifier_source_age','age_modifier_target_age', 'age_modifier_stride', 'age_modifier_mask_type' ])
+		facefusion.jobs.job_store.register_step_keys([ 'age_modifier_model', 'age_modifier_direction', 'age_modifier_source_age','age_modifier_target_age', 'age_modifier_stride', 'age_modifier_show_mask' ])
 
 
 def apply_args(args : Args, apply_state_item : ApplyStateItem) -> None:
@@ -167,7 +125,7 @@ def apply_args(args : Args, apply_state_item : ApplyStateItem) -> None:
 	apply_state_item('age_modifier_source_age', args.get('age_modifier_source_age'))
 	apply_state_item('age_modifier_target_age', args.get('age_modifier_target_age'))
 	apply_state_item('age_modifier_stride', args.get('age_modifier_stride'))
-	apply_state_item('age_modifier_mask_type', args.get('age_modifier_mask_type'))
+	apply_state_item('age_modifier_show_mask', args.get('age_modifier_show_mask'))
 
 
 def pre_check() -> bool:
@@ -192,18 +150,12 @@ def pre_check() -> bool:
 		if not is_file(mask_path):
 			logger.error(wording.get('help.download_fran_masks_first') + wording.get('exclamation_mark') + ' : ' + mask_url, __name__)
 			return False
-		if not is_file(small_mask_path):
-			#print('small_mask_path')
-			#print(small_mask_url)
-			#return conditional_download_sources(download_directory_path, small_mask_url)
+		if not is_file(small_mask_path):			
 			logger.error(wording.get('help.download_fran_masks_first') + wording.get('exclamation_mark') + ' : ' + small_mask_url, __name__)
 			return False
 		return True
-	elif age_modifier_model == 'fran_onnx':
-		return True
 	else:
 		return conditional_download_hashes(download_directory_path, model_hashes) and conditional_download_sources(download_directory_path, model_sources)
-	
 	
 
 def pre_process(mode : ProcessMode) -> bool:
@@ -232,48 +184,6 @@ def post_process() -> None:
 		face_recognizer.clear_inference_pool()
 
 
-def sliding_window_tensor(input_tensor, window_size, stride, your_model, mask, small_mask):
-    """
-    Apply aging operation on input tensor using a sliding-window method. This operation is done on the GPU, if available.
-    """
-    start_total = time.time()
-
-    input_tensor = input_tensor.to(next(your_model.parameters()).device)
-    mask = mask.to(next(your_model.parameters()).device)
-    small_mask = small_mask.to(next(your_model.parameters()).device)
-
-    n, c, h, w = input_tensor.size()
-    output_tensor = torch.zeros((n, 3, h, w), dtype=input_tensor.dtype, device=input_tensor.device)
-    count_tensor = torch.zeros((n, 3, h, w), dtype=torch.float32, device=input_tensor.device)
-    add = 2 if window_size % stride != 0 else 1
-
-    for y in range(0, h - window_size + add, stride):
-        for x in range(0, w - window_size + add, stride):
-            window = input_tensor[:, :, y:y + window_size, x:x + window_size]
-
-            # Apply the same preprocessing as during training
-            input_variable = Variable(window, requires_grad=False)  # Assuming GPU is available
-
-            # Forward pass
-            with torch.no_grad():
-                output = your_model(input_variable)
-                
-            output_tensor[:, :, y:y + window_size, x:x + window_size] += output * small_mask
-            count_tensor[:, :, y:y + window_size, x:x + window_size] += small_mask
-
-    count_tensor = torch.clamp(count_tensor, min=1.0)
-
-    print('TOTAL inference time (s) : ', time.time()-start_total)
-
-    # Average the overlapping regions
-    output_tensor /= count_tensor
-
-    # Apply mask
-    output_tensor *= mask
-
-    return output_tensor.cpu()
-
-
 def apply_fran_re_aging(input_array, window_size, stride, mask_array, small_mask_array):
 	"""
 	Optimized version to apply aging operation using a sliding-window method with an ONNX model, using NumPy arrays.
@@ -299,132 +209,16 @@ def apply_fran_re_aging(input_array, window_size, stride, mask_array, small_mask
 			output_array[:, :, y:y + window_size, x:x + window_size] += output_onnx * small_mask_array
 			count_array[:, :, y:y + window_size, x:x + window_size] += small_mask_array
 
-	count_array = np.clip(count_array, a_min=1.0, a_max=None)
-
-	# Average the overlapping regions
-	output_array /= count_array
-
-	# Apply mask
-	output_array *= mask_array
-
+	count_array = np.clip(count_array, a_min=1.0, a_max=None)	
+	output_array /= count_array # Average the overlapping regions
+	output_array *= mask_array # Apply mask
 	print('TOTAL inference time (s) : ', time.time() - start_total)
-
 	return output_array
 
 
-
 def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
-	
 	age_modifier_model = state_manager.get_item('age_modifier_model')
-
 	if age_modifier_model == 'fran':
-		# get model and masks used for the sliding_windows
-		fran_model_path = get_model_options().get("sources").get('age_modifier').get('path')
-		mask_path = get_model_options().get('masks').get("mask").get("path")
-		small_mask_path = get_model_options().get('masks').get("small_mask").get("path")
-		input_size = get_model_options().get('size') # (1024, 1024)
-		window_size = get_model_options().get('window_size') # 512 
-		stride = state_manager.get_item('age_modifier_stride')
-
-		device = torch.device("cuda:0" if torch.cuda.is_available() else "mps")
-		unet_model = UNet().to(device)
-		unet_model.load_state_dict(torch.load(fran_model_path, map_location=device))
-		unet_model.eval() # Set the model to evaluation mode
-
-		# Load mask, convert it to grayscale, and normalize its pixel values to the range [0, 1].
-		mask_file = torch.from_numpy(np.array(Image.open(mask_path).convert('L'))) / 255
-		small_mask_file = torch.from_numpy(np.array(Image.open(small_mask_path).convert('L'))) / 255
-		
-		image = temp_vision_frame.copy()
-		image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # Convert the image from BGR (OpenCV default) to RGB format.
-
-		# calculate margins
-		print("target_face.bounding_box", target_face.bounding_box)
-		print("face_mask_padding", state_manager.get_item("face_mask_padding"))
-		
-		x1, y1, x2, y2 = target_face.bounding_box
-		
-		face_mask_padding = state_manager.get_item("face_mask_padding") # top, right, bottom, left
-		x1 += face_mask_padding[3]
-		y1 += face_mask_padding[0]
-		x2 += face_mask_padding[1]
-		y2 += face_mask_padding[2]
-
-		margin_y_t = int((y2 - y1) * .63 * .85)  # Calculate the top margin to extend above the face for better coverage.
-		margin_y_b = int((y2 - y1) * .37 * .85)  # Calculate the bottom margin.
-		margin_x = int((x2 - x1) // (2 / .85))  # Calculate the horizontal margin for a square crop.
-		margin_y_t += 2 * margin_x - margin_y_t - margin_y_b  # Adjust the top margin to ensure a square crop.
-		
-		l_y = int(max([y1 - margin_y_t, 0]))  # Determine the top boundary of the crop, ensuring it doesn't go below zero.
-		r_y = int(min([y2 + margin_y_b, image.shape[0]]))  # Determine the bottom boundary, ensuring it stays within the image height.
-		l_x = int(max([x1 - margin_x, 0]))  # Determine the left boundary of the crop.
-		r_x = int(min([x2 + margin_x, image.shape[1]]))  # Determine the right boundary.
-	
-		# Crop the image to the computed boundaries
-		cropped_image = image[l_y:r_y, l_x:r_x, :]
-
-		# Resizing
-		orig_size = cropped_image.shape[:2]  # Save the original size of the cropped image.
-
-		cropped_image = transforms.ToTensor()(cropped_image)  # Convert the cropped image to a PyTorch tensor.
-		cropped_image_resized = transforms.Resize(input_size, interpolation=Image.BILINEAR, antialias=True)(cropped_image)  # Resize the image to the specified input size using bilinear interpolation.
-
-		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else 20  # Default source age to 20 if not provided.
-		target_age = state_manager.get_item('age_modifier_target_age') if state_manager.get_item('age_modifier_target_age') else 80
-
-		# Create channels representing the source and target ages as normalized tensors
-		source_age_channel = torch.full_like(cropped_image_resized[:1, :, :], source_age / 100)
-		target_age_channel = torch.full_like(cropped_image_resized[:1, :, :], target_age / 100)
-		input_tensor = torch.cat([cropped_image_resized, source_age_channel, target_age_channel], dim=0).unsqueeze(0)
-
-		image = transforms.ToTensor()(image)  # Convert the original image to a PyTorch tensor.
-
-		# Perform the aging transformation on the cropped image using a sliding window approach
-		aged_cropped_image = sliding_window_tensor(input_tensor, window_size, stride, unet_model, mask=mask_file, small_mask=small_mask_file)
-
-		
-		# Resize the transformed image back to its original size
-		aged_cropped_image_resized = transforms.Resize(orig_size, interpolation=Image.BILINEAR, antialias=True)(
-			aged_cropped_image)
-
-		# Apply the modified image back to the original image
-		image[:, l_y:r_y, l_x:r_x] += aged_cropped_image_resized.squeeze(0)
-
-		image = torch.clamp(image, 0, 1)  # Clamp the pixel values to ensure they are in the valid range [0, 1].
-
-		# Convert the tensor back to a NumPy array and transform it to BGR color space for display or further processing.
-		paste_vision_frame =  cv2.cvtColor(np.transpose((image.numpy()*255).astype(np.uint8), (1, 2, 0)), cv2.COLOR_RGB2BGR)
-		# print rectangle to see the cropping rectangle (after the aging process)
-		if state_manager.get_item('age_modifier_show_mask') == "Yes":
-			cv2.rectangle(paste_vision_frame, (l_x, l_y), (r_x, r_y), (0, 0, 255), 3)
-
-		
-
-		# -------------- DEV -------------- #
-		# deals with post_processing mask
-		face_landmark_5 = target_face.landmark_set.get('5/68').copy()
-
-		model_template = get_model_options().get('template')
-		model_size = get_model_options().get('size')
-		
-		crop_target_frame, affine_matrix = warp_face_by_face_landmark_5(temp_vision_frame, face_landmark_5, 
-																model_template, model_size)
-		#print("crop_target_frame.shape", crop_target_frame.shape)
-		box_mask = create_static_box_mask(model_size, state_manager.get_item('face_mask_blur'), (0, 0, 0, 0))
-		#print("box_mask.shape", box_mask.shape)
-		crop_masks =\
-		[
-			box_mask
-		]
-		crop_mask = np.minimum.reduce(crop_masks).clip(0, 1)
-		#print("image.shape", image.shape)
-		#print("aged_cropped_image_resized.shape", aged_cropped_image_resized.shape)
-
-		#temp_vision_frame = paste_back(image.numpy()*255, aged_cropped_image_resized.numpy(), crop_mask, affine_matrix)
-		#paste_vision_frame =  cv2.cvtColor(np.transpose(temp_vision_frame.astype(np.uint8), (1, 2, 0)), cv2.COLOR_RGB2BGR)
-		# -------------- DEV -------------- #
-	
-	elif age_modifier_model == 'fran_onnx':
 		# Load model options and masks
 		mask_path = get_model_options().get('masks').get("mask").get("path")
 		small_mask_path = get_model_options().get('masks').get("small_mask").get("path")
@@ -437,13 +231,10 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		small_mask_array = np.array(Image.open(small_mask_path).convert('L'), dtype=np.float32) / 255
 
 		# Load and preprocess image
-		#image = temp_vision_frame.copy()
-		image = cv2.cvtColor(temp_vision_frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255  # Normalize to [0, 1]
+		image = temp_vision_frame.copy() # (H, W, C)
+		image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32) / 255  # (H, W, C) Normalize to [0, 1]
 
 		# calculate margins
-		print("target_face.bounding_box", target_face.bounding_box)
-		print("face_mask_padding", state_manager.get_item("face_mask_padding"))
-		
 		x1, y1, x2, y2 = target_face.bounding_box
 		
 		face_mask_padding = state_manager.get_item("face_mask_padding") # top, right, bottom, left
@@ -462,39 +253,37 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		l_x = int(max([x1 - margin_x, 0]))  # Determine the left boundary of the crop.
 		r_x = int(min([x2 + margin_x, image.shape[1]]))  # Determine the right boundary.
 	
-		
 		# Crop the image to the computed boundaries
-		cropped_image = image[l_y:r_y, l_x:r_x, :]
+		cropped_image = image[l_y:r_y, l_x:r_x, :] # (H, W, C) cropped
 
-		# Resize using OpenCV
-		cropped_image_resized = cv2.resize(cropped_image, input_size, interpolation=cv2.INTER_LINEAR)
-		cropped_image_resized = np.transpose(cropped_image_resized, (2, 0, 1))  # Convert to [C, H, W]
+		# Resize it using OpenCV
+		cropped_image_resized = cv2.resize(cropped_image, input_size, interpolation=cv2.INTER_LINEAR) # (H, W, C) (1024, 1024, 3)
+		cropped_image_resized = np.transpose(cropped_image_resized, (2, 0, 1))  # [C, H, W] (3, 1024, 1024)
 
 		# Prepare input array
 		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else 20
 		target_age = state_manager.get_item('age_modifier_target_age') if state_manager.get_item('age_modifier_target_age') else 80
 
-		source_age_channel = np.full_like(cropped_image_resized[:1, :, :], source_age / 100)
-		target_age_channel = np.full_like(cropped_image_resized[:1, :, :], target_age / 100)
-		input_array = np.concatenate([cropped_image_resized, source_age_channel, target_age_channel], axis=0)[np.newaxis, ...]
+		source_age_channel = np.full_like(cropped_image_resized[:1, :, :], source_age / 100) # create a channel for source_age (1, 1024, 1024)
+		target_age_channel = np.full_like(cropped_image_resized[:1, :, :], target_age / 100) # create a channel for target_age (1, 1024, 1024)
+		input_array = np.concatenate([cropped_image_resized, source_age_channel, target_age_channel], axis=0)[np.newaxis, ...] # (1, 5, 1024, 1024)
 
-		aged_cropped_image = apply_fran_re_aging(input_array, window_size, stride, mask_array, small_mask_array)
+		aged_cropped_image = apply_fran_re_aging(input_array, window_size, stride, mask_array, small_mask_array) # (1, 3, 1024, 1024)
 
 		# Resize back to original size using OpenCV
-		aged_cropped_image_resized = cv2.resize(np.transpose(aged_cropped_image[0], (1, 2, 0)), (r_x - l_x, r_y - l_y), interpolation=cv2.INTER_LINEAR)
+		aged_cropped_image_resized = cv2.resize(np.transpose(aged_cropped_image[0], (1, 2, 0)), (r_x - l_x, r_y - l_y), interpolation=cv2.INTER_LINEAR) # [H, W, C]
 
 		# Reapply to original image
-		image[l_y:r_y, l_x:r_x] += aged_cropped_image_resized
-		image = np.clip(image, 0, 1)
+		image[l_y:r_y, l_x:r_x, :] += aged_cropped_image_resized # (H, W, C)
+		image = np.clip(image, 0, 1) # (H, W, C) [0-1]
 		
 		# Convert to final output format
-		paste_vision_frame = cv2.cvtColor((image * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+		paste_vision_frame = cv2.cvtColor((image * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)  # (H, W, C) [0-255]
 
 		# show rectangle to see the cropping rectangle (after the aging process)
 		if state_manager.get_item('age_modifier_show_mask') == "Yes":
 			cv2.rectangle(paste_vision_frame, (l_x, l_y), (r_x, r_y), (0, 0, 255), 3)
 		
-	
 	else:
 		print('styleganex_age')
 		model_template = get_model_options().get('template')
