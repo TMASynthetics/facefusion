@@ -113,13 +113,10 @@ def get_inference_pool() -> InferencePool:
 	model_sources = get_model_options().get('sources')
 	model_context = __name__ + '.' + state_manager.get_item('age_modifier_model')
 	
-	# mask and small_mask are asset and not model to be passed in inference_pool. -> move to assets/asset?
-	if "mask" in model_sources:
-		del model_sources["mask"]
-	if "small_mask" in model_sources:
-		del model_sources["small_mask"]
-
-	return inference_manager.get_inference_pool(model_context, model_sources)
+	# get sources only for the model (not for assets)
+	inference_only_model_sources = {key: value for key, value in model_sources.items() if key not in ['mask', 'small_mask']}
+	
+	return inference_manager.get_inference_pool(model_context, inference_only_model_sources)
 
 
 def clear_inference_pool() -> None:
@@ -222,10 +219,8 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 	age_modifier_model = state_manager.get_item('age_modifier_model')
 	if age_modifier_model == 'fran':
 		# Load model options and masks
-		mask_path = MODEL_SET['fran']['masks']['mask']['path']
-		small_mask_path = MODEL_SET['fran']['masks']['small_mask']['path']
-		#mask_path = get_model_options().get('sources').get("mask").get("path")
-		#small_mask_path = get_model_options().get('sources').get("small_mask").get("path")
+		mask_path = get_model_options().get('sources').get("mask").get("path")
+		small_mask_path = get_model_options().get('sources').get("small_mask").get("path")
 		input_size = get_model_options().get('size')  # (1024, 1024)
 		window_size = get_model_options().get('window_size') # 512 
 		stride = state_manager.get_item('age_modifier_stride')
