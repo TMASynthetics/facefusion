@@ -42,7 +42,7 @@ def conditional_download(download_directory_path : str, urls : List[str]) -> Non
 def get_download_size(url : str) -> int:
 	try:
 		response = urllib.request.urlopen(url, timeout = 10)
-		content_length = response.headers.get('Content-Length')
+		content_length = response.headers.get('Content-Length') 
 		return int(content_length)
 	except (OSError, TypeError, ValueError):
 		return 0
@@ -91,7 +91,9 @@ def conditional_download_sources(download_directory_path : str, sources : Downlo
 					invalid_source_url = sources.get(index).get('url')
 					conditional_download(download_directory_path, [ invalid_source_url ])
 
+	
 	valid_source_paths, invalid_source_paths = validate_source_paths(source_paths)
+	
 	for valid_source_path in valid_source_paths:
 		valid_source_file_name, _ = os.path.splitext(os.path.basename(valid_source_path))
 		logger.debug(wording.get('validating_source_succeed').format(source_file_name = valid_source_file_name), __name__)

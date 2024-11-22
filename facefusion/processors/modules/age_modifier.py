@@ -35,32 +35,38 @@ MODEL_SET : ModelSet =\
 		{
 			'age_modifier':
 			{
-				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/fran_onnx.hash',
-				'path': resolve_relative_path("../.assets/models/fran_onnx.hash"),
-			}
+				'url': 'https://github.com/Schumix60/models/releases/download/weights/fran.hash',
+				'path': resolve_relative_path("../.assets/models/fran.hash"),
+			},
+			'mask':
+			{
+				'url': 'https://github.com/Schumix60/models/releases/download/weights/mask1024.hash',
+				'path': resolve_relative_path("../.assets/models/mask1024.hash"),
+			},
+			'small_mask':
+			{
+				'url': 'https://github.com/Schumix60/models/releases/download/weights/mask512.hash',
+				'path': resolve_relative_path("../.assets/models/mask512.hash"),
+			},
 		},
 		'sources':
 		{
 			'age_modifier':
 			{
-				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/fran.onnx',
+				'url': 'https://github.com/Schumix60/models/releases/download/weights/fran.onnx',
 				'path': resolve_relative_path("../.assets/models/fran.onnx"),
 			},
-		},	
-		'masks':
-        {
-            'mask':
+			'mask':
 			{	
-				'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/mask1024.jpg',
-				'path': resolve_relative_path("../.assets/mask1024.jpg"),
+				'url': 'https://github.com/Schumix60/models/releases/download/weights/mask1024.jpg',
+				'path': resolve_relative_path("../.assets/models/mask1024.jpg"),
 			},
             'small_mask':
 			{
-				#'url': 'https://github.com/TMASynthetics/facefusion3/releases/download/v3.0.1/mask512.jpg',
 				'url': 'https://github.com/Schumix60/models/releases/download/weights/mask512.jpg',
-				'path': resolve_relative_path("../.assets/mask512.jpg"),
+				'path': resolve_relative_path("../.assets/models/mask512.jpg"),
 			}
-		},
+		},	
 		'template': 'ffhq_512',
 		'window_size': 512,
 		'size': (1024, 1024)
@@ -93,6 +99,13 @@ MODEL_SET : ModelSet =\
 def get_inference_pool() -> InferencePool:
 	model_sources = get_model_options().get('sources')
 	model_context = __name__ + '.' + state_manager.get_item('age_modifier_model')
+	
+	# mask and small_mask are asset and not model to be passed in inference_pool. -> move to assets/asset?
+	if "mask" in model_sources:
+		del model_sources["mask"]
+	if "small_mask" in model_sources:
+		del model_sources["small_mask"]
+
 	return inference_manager.get_inference_pool(model_context, model_sources)
 
 
@@ -132,32 +145,9 @@ def pre_check() -> bool:
 	download_directory_path = resolve_relative_path('../.assets/models')
 	model_hashes = get_model_options().get('hashes')
 	model_sources = get_model_options().get('sources')
-
-	age_modifier_model = state_manager.get_item('age_modifier_model')
-
-	# manage the manual download of fran assets
-	if age_modifier_model == 'fran':
-		model_path = model_sources.get('age_modifier').get('path')
-		model_url = model_sources.get('age_modifier').get('url')
-		mask_path = get_model_options().get('masks').get("mask").get("path")
-		mask_url = get_model_options().get('masks').get("mask").get("url")
-		small_mask_path = get_model_options().get('masks').get("small_mask").get("path")
-		small_mask_url = get_model_options().get('masks')
-		if not is_file(model_path):
-			#return conditional_download_sources(download_directory_path, model_sources)
-			logger.error(wording.get('help.download_fran_model_first') + wording.get('exclamation_mark') + ' : ' + model_url, __name__)
-			return False
-		if not is_file(mask_path):
-			logger.error(wording.get('help.download_fran_masks_first') + wording.get('exclamation_mark') + ' : ' + mask_url, __name__)
-			return False
-		if not is_file(small_mask_path):			
-			logger.error(wording.get('help.download_fran_masks_first') + wording.get('exclamation_mark') + ' : ' + small_mask_url, __name__)
-			return False
-		return True
-	else:
-		return conditional_download_hashes(download_directory_path, model_hashes) and conditional_download_sources(download_directory_path, model_sources)
+	return conditional_download_hashes(download_directory_path, model_hashes) and conditional_download_sources(download_directory_path, model_sources)
 	
-
+	
 def pre_process(mode : ProcessMode) -> bool:
 	if mode in [ 'output', 'preview' ] and not is_image(state_manager.get_item('target_path')) and not is_video(state_manager.get_item('target_path')):
 		logger.error(wording.get('choose_image_or_video_target') + wording.get('exclamation_mark'), __name__)
@@ -188,7 +178,6 @@ def apply_fran_re_aging(input_array, window_size, stride, mask_array, small_mask
 	"""
 	Optimized version to apply aging operation using a sliding-window method with an ONNX model, using NumPy arrays.
 	"""
-	print('apply_fran_re_aging')
 	start_total = time.time()
 	age_modifier = get_inference_pool().get("age_modifier")
 
@@ -220,8 +209,8 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 	age_modifier_model = state_manager.get_item('age_modifier_model')
 	if age_modifier_model == 'fran':
 		# Load model options and masks
-		mask_path = get_model_options().get('masks').get("mask").get("path")
-		small_mask_path = get_model_options().get('masks').get("small_mask").get("path")
+		mask_path = get_model_options().get('sources').get("mask").get("path")
+		small_mask_path = get_model_options().get('sources').get("small_mask").get("path")
 		input_size = get_model_options().get('size')  # (1024, 1024)
 		window_size = get_model_options().get('window_size') # 512 
 		stride = state_manager.get_item('age_modifier_stride')
@@ -285,7 +274,6 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 			cv2.rectangle(paste_vision_frame, (l_x, l_y), (r_x, r_y), (0, 0, 255), 3)
 		
 	else:
-		print('styleganex_age')
 		model_template = get_model_options().get('template')
 		model_size = get_model_options().get('size')
 		crop_size = (model_size[0] // 2, model_size[1] // 2)  # divide the size by 2

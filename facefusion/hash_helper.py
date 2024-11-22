@@ -9,13 +9,13 @@ def create_hash(content : bytes) -> str:
 	return format(zlib.crc32(content), '08x')
 
 
-# file_path = '.assets/models/best_unet_model.pth'  # Remplacez par le chemin de votre fichier .pth
-# with open(file_path, 'rb') as f:
-#    file_content = f.read()
+#file_path = '.assets/models/fran.onnx'  # your onnx file
+#with open(file_path, 'rb') as f:
+#   file_content = f.read()
 
 # Calculer le hash
-# hash_value = create_hash(file_content)
-# print(f"CRC32 Hash: {hash_value}")
+#hash_value = create_hash(file_content)
+#print(f"CRC32 Hash: {hash_value}")
 
 def validate_hash(validate_path : str) -> bool:
 	hash_path = get_hash_path(validate_path)
