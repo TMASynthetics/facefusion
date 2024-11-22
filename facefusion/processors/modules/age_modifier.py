@@ -15,7 +15,7 @@ from facefusion.common_helper import create_int_metavar
 from facefusion.download import conditional_download_hashes, conditional_download_sources
 from facefusion.face_analyser import get_many_faces, get_one_face
 from facefusion.face_helper import merge_matrix, paste_back, scale_face_landmark_5, warp_face_by_face_landmark_5
-from facefusion.face_masker import create_occlusion_mask, create_static_box_mask
+from facefusion.face_masker import create_occlusion_mask, create_static_box_mask, create_region_mask
 from facefusion.face_selector import find_similar_faces, sort_and_filter_faces
 from facefusion.face_store import get_reference_faces
 from facefusion.filesystem import in_directory, is_image, is_video, is_file, resolve_relative_path, same_file_extension
@@ -239,7 +239,7 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		face_mask_padding = state_manager.get_item("face_mask_padding") # top, right, bottom, left
 		x1 += face_mask_padding[3]
 		y1 += face_mask_padding[0]
-		x2 += face_mask_padding[1]
+		x2 -= face_mask_padding[1]
 		y2 += face_mask_padding[2]
 
 		margin_y_t = int((y2 - y1) * .63 * .85)  # Calculate the top margin to extend above the face for better coverage.
@@ -278,6 +278,38 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		
 		# Convert to final output format
 		paste_vision_frame = cv2.cvtColor((image * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)  # (H, W, C) [0-255]
+
+		# Masking
+		model_template = get_model_options().get('template')
+		#model_size = get_model_options().get('size')
+		model_size = (int(r_x - l_x), int(r_y - l_y))
+		face_landmark_5 = target_face.landmark_set.get('5/68').copy()
+		crop_vision_frame, affine_matrix = warp_face_by_face_landmark_5(paste_vision_frame, face_landmark_5, model_template, model_size)
+		
+		box_mask = create_static_box_mask(crop_vision_frame.shape[:2], state_manager.get_item('face_mask_blur'), (0, 0, 0, 0))
+		#print("box_mask.shape", box_mask.shape)
+		cv2.imwrite("mask_temp_vision_frame.jpg", temp_vision_frame)
+		cv2.imwrite("mask_crop_vision_frame.jpg", crop_vision_frame)
+		cv2.imwrite("mask_box_mask.jpg", box_mask*255.)
+		
+		crop_masks =\
+		[
+		box_mask
+		]
+
+		if 'occlusion' in state_manager.get_item('face_mask_types'):
+			occlusion_mask = create_occlusion_mask(crop_vision_frame)
+			crop_masks.append(occlusion_mask)
+		if 'region' in state_manager.get_item('face_mask_types'):
+			region_mask = create_region_mask(crop_vision_frame, state_manager.get_item('face_mask_regions'))
+			cv2.imwrite("mask_region_mask.jpg", region_mask*255.)
+			crop_masks.append(region_mask)
+		crop_mask = np.minimum.reduce(crop_masks).clip(0, 1)
+		
+		cv2.imwrite("mask_reduced_crop_mask.jpg", crop_mask*255.)
+
+		paste_vision_frame = paste_back(temp_vision_frame, crop_vision_frame, crop_mask, affine_matrix)
+		
 
 		# show rectangle to see the cropping rectangle (after the aging process)
 		if state_manager.get_item('age_modifier_show_mask') == "Yes":
