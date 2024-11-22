@@ -66,7 +66,20 @@ MODEL_SET : ModelSet =\
 				'url': 'https://github.com/Schumix60/models/releases/download/weights/mask512.jpg',
 				'path': resolve_relative_path("../.assets/models/mask512.jpg"),
 			}
-		},	
+		},
+		'masks':
+		{
+            'mask':
+			{	
+				'url': 'https://github.com/Schumix60/models/releases/download/weights/mask1024.jpg',
+				'path': resolve_relative_path("../.assets/models/mask1024.jpg"),
+			},
+            'small_mask':
+			{
+				'url': 'https://github.com/Schumix60/models/releases/download/weights/mask512.jpg',
+				'path': resolve_relative_path("../.assets/models/mask512.jpg"),
+			}
+		}, 
 		'template': 'ffhq_512',
 		'window_size': 512,
 		'size': (1024, 1024)
@@ -209,8 +222,10 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 	age_modifier_model = state_manager.get_item('age_modifier_model')
 	if age_modifier_model == 'fran':
 		# Load model options and masks
-		mask_path = get_model_options().get('sources').get("mask").get("path")
-		small_mask_path = get_model_options().get('sources').get("small_mask").get("path")
+		mask_path = MODEL_SET['fran']['masks']['mask']['path']
+		small_mask_path = MODEL_SET['fran']['masks']['small_mask']['path']
+		#mask_path = get_model_options().get('sources').get("mask").get("path")
+		#small_mask_path = get_model_options().get('sources').get("small_mask").get("path")
 		input_size = get_model_options().get('size')  # (1024, 1024)
 		window_size = get_model_options().get('window_size') # 512 
 		stride = state_manager.get_item('age_modifier_stride')
