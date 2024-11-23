@@ -1,5 +1,6 @@
 import os
 import shutil
+import json
 import subprocess
 import tempfile
 from typing import List, Optional
@@ -46,6 +47,29 @@ def log_debug(process : subprocess.Popen[bytes]) -> None:
 		if error.strip():
 			logger.debug(error.strip(), __name__)
 
+def get_pix_fmt_from_video(video_path):
+    # Run ffprobe to get detailed information about the video
+    command = [
+        'ffprobe', 
+        '-v', 'error', 
+        '-select_streams', 'v:0',  # First video stream
+        '-show_entries', 'stream=pix_fmt',  # Only show the pixel format
+        '-of', 'json',  # Output as JSON for easy parsing
+        video_path
+    ]
+    
+    # Execute the command and capture the output
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+    # Parse the JSON output
+    video_info = json.loads(result.stdout.decode())
+    
+    # Extract the pixel format from the JSON response
+    if 'streams' in video_info and len(video_info['streams']) > 0:
+        pix_fmt = video_info['streams'][0].get('pix_fmt', None)
+        return pix_fmt
+    return None
+
 
 def extract_frames(target_path : str, temp_video_resolution : str, temp_video_fps : Fps) -> bool:
 	trim_frame_start = state_manager.get_item('trim_frame_start')
@@ -60,7 +84,13 @@ def extract_frames(target_path : str, temp_video_resolution : str, temp_video_fp
 	elif isinstance(trim_frame_end, int):
 		commands.extend([ '-vf', 'trim=end_frame=' + str(trim_frame_end) + ',fps=' + str(temp_video_fps) ])
 	else:
-		commands.extend([ '-vf', 'fps=' + str(temp_video_fps) ])
+		commands.extend([ '-vf', 'fps=' + str(temp_video_fps) ])	
+	
+	if temp_frames_pattern.endswith(('tif', 'exr')):		
+		pix_fmt = get_pix_fmt_from_video(state_manager.get_item('target_path'))
+		if pix_fmt:
+			commands.extend(['-pix_fmt', pix_fmt])
+
 	commands.extend([ '-vsync', '0', temp_frames_pattern ])
 	return run_ffmpeg(commands).returncode == 0
 
@@ -74,18 +104,26 @@ def merge_video(target_path : str, output_video_resolution : str, output_video_f
 	if state_manager.get_item('output_video_encoder') in [ 'libx264', 'libx265' ]:
 		output_video_compression = round(51 - (state_manager.get_item('output_video_quality') * 0.51))
 		commands.extend([ '-crf', str(output_video_compression), '-preset', state_manager.get_item('output_video_preset') ])
+		commands.extend(['-pix_fmt', 'yuv420p', '-colorspace', 'bt709'])
 	if state_manager.get_item('output_video_encoder') in [ 'libvpx-vp9' ]:
 		output_video_compression = round(63 - (state_manager.get_item('output_video_quality') * 0.63))
 		commands.extend([ '-crf', str(output_video_compression) ])
+		commands.extend(['-pix_fmt', 'yuv420p', '-colorspace', 'bt709'])
 	if state_manager.get_item('output_video_encoder') in [ 'h264_nvenc', 'hevc_nvenc' ]:
 		output_video_compression = round(51 - (state_manager.get_item('output_video_quality') * 0.51))
 		commands.extend([ '-cq', str(output_video_compression), '-preset', map_nvenc_preset(state_manager.get_item('output_video_preset')) ])
+		commands.extend(['-pix_fmt', 'yuv420p', '-colorspace', 'bt709'])
 	if state_manager.get_item('output_video_encoder') in [ 'h264_amf', 'hevc_amf' ]:
 		output_video_compression = round(51 - (state_manager.get_item('output_video_quality') * 0.51))
 		commands.extend([ '-qp_i', str(output_video_compression), '-qp_p', str(output_video_compression), '-quality', map_amf_preset(state_manager.get_item('output_video_preset')) ])
+		commands.extend(['-pix_fmt', 'yuv420p', '-colorspace', 'bt709'])
 	if state_manager.get_item('output_video_encoder') in [ 'h264_videotoolbox', 'hevc_videotoolbox' ]:
 		commands.extend([ '-q:v', str(state_manager.get_item('output_video_quality')) ])
-	commands.extend([ '-vf', 'framerate=fps=' + str(output_video_fps), '-pix_fmt', 'yuv420p', '-colorspace', 'bt709', '-y', temp_file_path ])
+		commands.extend(['-pix_fmt', 'yuv420p', '-colorspace', 'bt709'])
+	if state_manager.get_item('output_video_encoder') in [ 'prores_ks' ]:
+		commands.extend([ '-profile:v', '3', '-pix_fmt', 'yuv422p10le' ])	
+		temp_file_path = temp_file_path[:-4] + ".mov"
+	commands.extend([ '-vf', 'framerate=fps=' + str(output_video_fps), '-y', temp_file_path ])
 	return run_ffmpeg(commands).returncode == 0
 
 
