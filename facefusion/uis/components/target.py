@@ -9,7 +9,7 @@ from facefusion.uis.core import register_ui_component
 from facefusion.uis.typing import ComponentOptions, File
 from facefusion.vision import get_video_frame, normalize_frame_color
 
-FILE_SIZE_LIMIT = 4096 * 1024 * 1024
+FILE_SIZE_LIMIT = 512 * 1024 * 1024
 
 TARGET_FILE : Optional[gradio.File] = None
 TARGET_IMAGE : Optional[gradio.Image] = None
