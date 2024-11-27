@@ -16,7 +16,14 @@ AGE_MODIFIER_TARGET_AGE_SLIDER : Optional[gradio.Slider] = None
 AGE_MODIFIER_STRIDE_SLIDER : Optional[gradio.Slider] = None
 AGE_MODIFIER_SHOW_MASK : Optional[gradio.Radio] = None
 
+def get_visibility_states():
+    has_age_modifier = 'age_modifier' in state_manager.get_item('processors')
+    has_fran = 'fran' in state_manager.get_item('age_modifier_model')
+    advanced_user = state_manager.get_item('advanced_user') == True
+    return has_age_modifier, has_fran, advanced_user
+
 def render() -> None:
+	
 	global AGE_MODIFIER_MODEL_DROPDOWN
 	global AGE_MODIFIER_DIRECTION_SLIDER
 	global AGE_MODIFIER_SOURCE_AGE_SLIDER
@@ -24,11 +31,13 @@ def render() -> None:
 	global AGE_MODIFIER_STRIDE_SLIDER
 	global AGE_MODIFIER_SHOW_MASK
 
+	has_age_modifier, has_fran, is_advanced_user = get_visibility_states()
+
 	AGE_MODIFIER_MODEL_DROPDOWN = gradio.Dropdown(
 		label = wording.get('uis.age_modifier_model_dropdown'),
 		choices = processors_choices.age_modifier_models,
 		value = state_manager.get_item('age_modifier_model'),
-		visible = 'age_modifier' in state_manager.get_item('processors')
+		visible = has_age_modifier
 	)
 	AGE_MODIFIER_DIRECTION_SLIDER = gradio.Slider(
 		label = wording.get('uis.age_modifier_direction_slider'),
@@ -36,7 +45,7 @@ def render() -> None:
 		step = calc_float_step(processors_choices.age_modifier_direction_range),
 		minimum = processors_choices.age_modifier_direction_range[0],
 		maximum = processors_choices.age_modifier_direction_range[-1],
-		visible = 'age_modifier' in state_manager.get_item('processors') and 'fran' not in state_manager.get_item('age_modifier_model')
+		visible = has_age_modifier and not has_fran
 	)
 	AGE_MODIFIER_SOURCE_AGE_SLIDER = gradio.Slider(
 		label = wording.get('uis.age_modifier_source_age_slider'),
@@ -44,7 +53,7 @@ def render() -> None:
 		step = calc_float_step(processors_choices.age_modifier_source_age_range),
 		minimum = processors_choices.age_modifier_source_age_range[0],
 		maximum = processors_choices.age_modifier_source_age_range[-1],
-		visible = 'age_modifier' in state_manager.get_item('processors') and 'fran' in state_manager.get_item('age_modifier_model')
+		visible = has_age_modifier and has_fran
 	)
 	AGE_MODIFIER_TARGET_AGE_SLIDER = gradio.Slider(
 		label = wording.get('uis.age_modifier_target_age_slider'),
@@ -52,7 +61,7 @@ def render() -> None:
 		step = calc_float_step(processors_choices.age_modifier_target_age_range),
 		minimum = processors_choices.age_modifier_target_age_range[0],
 		maximum = processors_choices.age_modifier_target_age_range[-1],
-		visible = 'age_modifier' in state_manager.get_item('processors') and 'fran' in state_manager.get_item('age_modifier_model')
+		visible = has_age_modifier and has_fran
 	)
 	AGE_MODIFIER_STRIDE_SLIDER = gradio.Slider(
 		label = wording.get('uis.age_modifier_stride_slider'),
@@ -60,13 +69,13 @@ def render() -> None:
 		step = calc_float_step(processors_choices.age_modifier_stride_range),
 		minimum = processors_choices.age_modifier_stride_range[0],
 		maximum = processors_choices.age_modifier_stride_range[-1],
-		visible = 'age_modifier' in state_manager.get_item('processors') and 'fran' in state_manager.get_item('age_modifier_model')
+		visible = is_advanced_user and has_age_modifier and has_fran
 	)
 	AGE_MODIFIER_SHOW_MASK = gradio.Radio(
 		label = wording.get('uis.age_modifier_show_mask'),
 		choices = ["Yes", "No"],
 		value = "No", 
-		visible = 'age_modifier' in state_manager.get_item('processors') and 'fran' in state_manager.get_item('age_modifier_model')
+		visible = has_age_modifier and has_fran
 	)
 
 	register_ui_component('age_modifier_model_dropdown', AGE_MODIFIER_MODEL_DROPDOWN)
@@ -84,16 +93,17 @@ def listen() -> None:
 	AGE_MODIFIER_STRIDE_SLIDER.release(update_age_modifier_stride, inputs = AGE_MODIFIER_STRIDE_SLIDER)
 	AGE_MODIFIER_SHOW_MASK.change(change_age_modifier_show_mask, inputs = AGE_MODIFIER_SHOW_MASK, outputs = AGE_MODIFIER_SHOW_MASK)
 
+	print(state_manager.get_item('advanced_user'))
+
 	processors_checkbox_group = get_ui_component('processors_checkbox_group')
 	if processors_checkbox_group:
 		processors_checkbox_group.change(remote_update, inputs = processors_checkbox_group, outputs = [ AGE_MODIFIER_MODEL_DROPDOWN, AGE_MODIFIER_DIRECTION_SLIDER, AGE_MODIFIER_SOURCE_AGE_SLIDER, AGE_MODIFIER_TARGET_AGE_SLIDER, AGE_MODIFIER_STRIDE_SLIDER, AGE_MODIFIER_SHOW_MASK ])
 
 
 def remote_update(processors : List[str]) -> Tuple[gradio.Dropdown, gradio.Slider, gradio.Slider, gradio.Slider, gradio.Slider, gradio.CheckboxGroup]:
-	has_age_modifier = 'age_modifier' in processors
-	has_fran = 'fran' in state_manager.get_item('age_modifier_model')
-	print(has_age_modifier, has_fran)
-	return gradio.Dropdown(visible = has_age_modifier), gradio.Slider(visible = has_age_modifier and not has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible= has_age_modifier and has_fran), gradio.CheckboxGroup(visible = has_age_modifier and has_fran)
+	has_age_modifier, has_fran, is_advanced_user = get_visibility_states()
+
+	return gradio.Dropdown(visible = has_age_modifier), gradio.Slider(visible = has_age_modifier and not has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible = is_advanced_user and has_age_modifier and has_fran), gradio.CheckboxGroup(visible = has_age_modifier and has_fran)
 
 
 def update_age_modifier_model(age_modifier_model : AgeModifierModel) -> Tuple[gradio.Dropdown, gradio.Slider, gradio.Slider, gradio.Slider, gradio.Slider, gradio.CheckboxGroup]:
@@ -101,12 +111,11 @@ def update_age_modifier_model(age_modifier_model : AgeModifierModel) -> Tuple[gr
 	age_modifier_module.clear_inference_pool()
 	state_manager.set_item('age_modifier_model', age_modifier_model)
 
-	has_age_modifier = 'age_modifier' in state_manager.get_item('processors')
-	has_fran = 'fran' in state_manager.get_item('age_modifier_model')
+	has_age_modifier, has_fran, is_advanced_user = get_visibility_states()
 	
 	if age_modifier_module.pre_check():
-		return gradio.Dropdown(value = state_manager.get_item('age_modifier_model')), gradio.Slider(visible = has_age_modifier and not has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible= has_age_modifier and has_fran), gradio.CheckboxGroup(visible = has_age_modifier and has_fran)
-	return gradio.Dropdown(visible = has_age_modifier), gradio.Slider(visible = has_age_modifier and not has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible= has_age_modifier and has_fran), gradio.CheckboxGroup(visible = has_age_modifier and has_fran)
+		return gradio.Dropdown(value = state_manager.get_item('age_modifier_model')), gradio.Slider(visible = has_age_modifier and not has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible = is_advanced_user and has_age_modifier and has_fran), gradio.CheckboxGroup(visible = has_age_modifier and has_fran)
+	return gradio.Dropdown(visible = has_age_modifier), gradio.Slider(visible = has_age_modifier and not has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible = is_advanced_user and has_age_modifier and has_fran), gradio.CheckboxGroup(visible = has_age_modifier and has_fran)
 
 
 def update_age_modifier_direction(age_modifier_direction : float) -> None:

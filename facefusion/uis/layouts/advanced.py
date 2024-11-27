@@ -11,10 +11,27 @@ def pre_check() -> bool:
 
 def render() -> gradio.Blocks:
 	with gradio.Blocks() as layout:
+		# Advanced_user visibility functionnalies and blocks
+		def toggle_advanced_user(current_state):
+			state_manager.set_item('advanced_user', current_state)
+			advanced_user = state_manager.get_item('advanced_user') == True
+			return [
+				gradio.update(visible=advanced_user), # as many return as gradio.Group affected by the toggle
+				gradio.update(visible=advanced_user), 
+				gradio.update(visible=advanced_user)
+			]
+		
 		with gradio.Row():
-			with gradio.Column(scale = 4):
+			# Column 1
+			with gradio.Column(scale=4):
 				with gradio.Blocks():
 					about.render()
+				# Switch for Advanced User
+				advanced_user_switch = gradio.Checkbox(
+					label="Advanced User",
+					value=state_manager.get_item('advanced_user'),
+					interactive=True
+				)
 				with gradio.Blocks():
 					processors.render()
 				with gradio.Blocks():
@@ -35,16 +52,19 @@ def render() -> gradio.Blocks:
 					frame_enhancer_options.render()
 				with gradio.Blocks():
 					lip_syncer_options.render()
-				with gradio.Blocks():
-					execution.render()
-					execution_thread_count.render()
-					execution_queue_count.render()
-				with gradio.Blocks():
-					memory.render()
+				with gradio.Group(visible=state_manager.get_item('advanced_user')) as advanced_block1:
+					with gradio.Blocks():
+						execution.render()
+						execution_thread_count.render()
+						execution_queue_count.render()
+					with gradio.Blocks():
+						memory.render()
 				with gradio.Blocks():
 					temp_frame.render()
 				with gradio.Blocks():
 					output_options.render()
+
+			# Column 2
 			with gradio.Column(scale = 4):
 				with gradio.Blocks():
 					source.render()
@@ -54,11 +74,15 @@ def render() -> gradio.Blocks:
 					output.render()
 				with gradio.Blocks():
 					terminal.render()
+				with gradio.Group(visible=state_manager.get_item('advanced_user')) as advanced_block2:
+					with gradio.Blocks():
+						ui_workflow.render()
 				with gradio.Blocks():
-					ui_workflow.render()
 					instant_runner.render()
 					job_runner.render()
 					job_manager.render()
+
+			# Column 3
 			with gradio.Column(scale = 7):
 				with gradio.Blocks():
 					preview.render()
@@ -68,12 +92,20 @@ def render() -> gradio.Blocks:
 					face_selector.render()
 				with gradio.Blocks():
 					face_masker.render()
-				with gradio.Blocks():
-					face_detector.render()
-				with gradio.Blocks():
-					face_landmarker.render()
-				with gradio.Blocks():
-					common_options.render()
+				with gradio.Group(visible=state_manager.get_item('advanced_user')) as advanced_block3:
+					with gradio.Blocks():
+						face_detector.render()
+					with gradio.Blocks():
+						face_landmarker.render()
+					with gradio.Blocks():
+						common_options.render()
+
+		# Mise à jour des groupes
+		advanced_user_switch.change(
+			toggle_advanced_user,
+			inputs=[advanced_user_switch],
+			outputs=[advanced_block1, advanced_block2, advanced_block3]
+		)
 	return layout
 
 
@@ -88,16 +120,11 @@ def listen() -> None:
 	frame_colorizer_options.listen()
 	frame_enhancer_options.listen()
 	lip_syncer_options.listen()
-	execution.listen()
-	execution_thread_count.listen()
-	execution_queue_count.listen()
-	memory.listen()
 	temp_frame.listen()
 	output_options.listen()
 	source.listen()
 	target.listen()
 	output.listen()
-	instant_runner.listen()
 	job_runner.listen()
 	job_manager.listen()
 	terminal.listen()
@@ -105,9 +132,17 @@ def listen() -> None:
 	trim_frame.listen()
 	face_selector.listen()
 	face_masker.listen()
-	face_detector.listen()
-	face_landmarker.listen()
-	common_options.listen()
+	
+	if state_manager.get_item('advanced_user') == True:
+		execution.listen()
+		execution_thread_count.listen()
+		execution_queue_count.listen()
+		memory.listen()
+		instant_runner.listen()
+		face_detector.listen()
+		face_landmarker.listen()
+		common_options.listen()
+
 
 
 def run(ui : gradio.Blocks) -> None:
