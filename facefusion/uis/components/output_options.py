@@ -135,8 +135,7 @@ def remote_update() -> Tuple[gradio.Slider, gradio.Dropdown, gradio.Dropdown, gr
 		else:
 			state_manager.set_item('output_video_encoder', 'libx264')
 			encoder_value = 'libx264'
-			encoder_choices = facefusion.choices.output_video_encoders.copy()
-			encoder_choices.remove("prores_ks")
+			encoder_choices = [i for i in facefusion.choices.output_video_encoders if i not in ['prores_ks']]
 
 		return gradio.Slider(visible = False), gradio.Dropdown(visible = False), gradio.Dropdown(visible = True), gradio.Dropdown(visible = True, value=encoder_value, choices=encoder_choices), gradio.Dropdown(visible = True), gradio.Slider(visible = True), gradio.Dropdown(value = state_manager.get_item('output_video_resolution'), choices = output_video_resolutions, visible = True), gradio.Slider(value = state_manager.get_item('output_video_fps'), visible = True)
 	return gradio.Slider(visible = False), gradio.Dropdown(visible = False), gradio.Dropdown(visible = False), gradio.Dropdown(visible = False), gradio.Dropdown(visible = False), gradio.Slider(visible = False), gradio.Dropdown(visible = False), gradio.Slider(visible = False)
