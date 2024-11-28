@@ -217,7 +217,12 @@ def apply_fran_re_aging(input_array, window_size, stride, mask_array, small_mask
 
 def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
 	age_modifier_model = state_manager.get_item('age_modifier_model')
+	
 	if age_modifier_model == 'fran':
+		# estimate age
+		source_age_estimate = np.mean(target_face.age)
+		print(source_age_estimate)
+
 		# Load model options and masks
 		mask_path = get_model_options().get('sources').get("mask").get("path")
 		small_mask_path = get_model_options().get('sources').get("small_mask").get("path")
@@ -260,7 +265,7 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		cropped_image_resized = np.transpose(cropped_image_resized, (2, 0, 1))  # [C, H, W] (3, 1024, 1024)
 
 		# Prepare input array
-		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else 20
+		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else source_age_estimate
 		target_age = state_manager.get_item('age_modifier_target_age') if state_manager.get_item('age_modifier_target_age') else 80
 
 		source_age_channel = np.full_like(cropped_image_resized[:1, :, :], source_age / 100) # create a channel for source_age (1, 1024, 1024)

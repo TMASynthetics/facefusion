@@ -16,42 +16,46 @@ def render() -> gradio.Blocks:
 			state_manager.set_item('advanced_user', current_state)
 			advanced_user = state_manager.get_item('advanced_user') == True
 			return [
-				gradio.update(visible=advanced_user), # as many return as gradio.Group affected by the toggle
-				gradio.update(visible=advanced_user), 
-				gradio.update(visible=advanced_user)
+				gradio.update(visible=True), # basic_block1
+				gradio.update(visible=advanced_user), # advanced_block1
+				gradio.update(visible=True), # basic_block2
+				gradio.update(visible=advanced_user), # advanced_block2
+				gradio.update(visible=advanced_user), # advanced_block3
 			]
 		
 		with gradio.Row():
 			# Column 1
 			with gradio.Column(scale=4):
+				
 				with gradio.Blocks():
 					about.render()
 				# Switch for Advanced User
 				advanced_user_switch = gradio.Checkbox(
 					label="Advanced User",
-					value=state_manager.get_item('advanced_user'),
+					value=state_manager.get_item('advanced_user')==True,
 					interactive=True
 				)
 				with gradio.Blocks():
 					processors.render()
-				with gradio.Blocks():
-					age_modifier_options.render()
-				with gradio.Blocks():
-					expression_restorer_options.render()
-				with gradio.Blocks():
-					face_debugger_options.render()
-				with gradio.Blocks():
-					face_editor_options.render()
-				with gradio.Blocks():
-					face_enhancer_options.render()
-				with gradio.Blocks():
-					face_swapper_options.render()
-				with gradio.Blocks():
-					frame_colorizer_options.render()
-				with gradio.Blocks():
-					frame_enhancer_options.render()
-				with gradio.Blocks():
-					lip_syncer_options.render()
+				with gradio.Group(visible=True) as basic_block1:
+					with gradio.Blocks():
+						age_modifier_options.render()
+					with gradio.Blocks():
+						expression_restorer_options.render()
+					with gradio.Blocks():
+						face_debugger_options.render()
+					with gradio.Blocks():
+						face_editor_options.render()
+					with gradio.Blocks():
+						face_enhancer_options.render()
+					with gradio.Blocks():
+						face_swapper_options.render()
+					with gradio.Blocks():
+						frame_colorizer_options.render()
+					with gradio.Blocks():
+						frame_enhancer_options.render()
+					with gradio.Blocks():
+						lip_syncer_options.render()
 				with gradio.Group(visible=state_manager.get_item('advanced_user')) as advanced_block1:
 					with gradio.Blocks():
 						execution.render()
@@ -59,10 +63,11 @@ def render() -> gradio.Blocks:
 						execution_queue_count.render()
 					with gradio.Blocks():
 						memory.render()
-				with gradio.Blocks():
-					temp_frame.render()
-				with gradio.Blocks():
-					output_options.render()
+				with gradio.Group(visible=True) as basic_block2:
+					with gradio.Blocks():
+						temp_frame.render()
+					with gradio.Blocks():
+						output_options.render()
 
 			# Column 2
 			with gradio.Column(scale = 4):
@@ -104,7 +109,7 @@ def render() -> gradio.Blocks:
 		advanced_user_switch.change(
 			toggle_advanced_user,
 			inputs=[advanced_user_switch],
-			outputs=[advanced_block1, advanced_block2, advanced_block3]
+			outputs=[basic_block1, advanced_block1, basic_block2, advanced_block2, advanced_block3]
 		)
 	return layout
 

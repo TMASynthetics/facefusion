@@ -19,9 +19,11 @@ def render() -> None:
 		value = state_manager.get_item('processors')
 	)
 	register_ui_component('processors_checkbox_group', PROCESSORS_CHECKBOX_GROUP)
+	print("processors", PROCESSORS_CHECKBOX_GROUP)
 
 
 def listen() -> None:
+	print("processors.listen()", PROCESSORS_CHECKBOX_GROUP)
 	PROCESSORS_CHECKBOX_GROUP.change(update_processors, inputs = PROCESSORS_CHECKBOX_GROUP, outputs = PROCESSORS_CHECKBOX_GROUP)
 
 

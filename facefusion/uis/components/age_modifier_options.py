@@ -23,6 +23,8 @@ def get_visibility_states():
     return has_age_modifier, has_fran, advanced_user
 
 def render() -> None:
+	print('age_modifier_ui.render()')
+	print('state_manager.get_item(processors)', state_manager.get_item('processors'))
 	
 	global AGE_MODIFIER_MODEL_DROPDOWN
 	global AGE_MODIFIER_DIRECTION_SLIDER
