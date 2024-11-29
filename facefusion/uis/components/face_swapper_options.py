@@ -12,22 +12,28 @@ from facefusion.uis.core import get_ui_component, register_ui_component
 FACE_SWAPPER_MODEL_DROPDOWN : Optional[gradio.Dropdown] = None
 FACE_SWAPPER_PIXEL_BOOST_DROPDOWN : Optional[gradio.Dropdown] = None
 
+def get_visibility_states():
+	has_face_swapper = 'face_swapper' in state_manager.get_item('processors')
+	advanced_user = state_manager.get_item('advanced_user') == True
+	return has_face_swapper, advanced_user
 
 def render() -> None:
 	global FACE_SWAPPER_MODEL_DROPDOWN
 	global FACE_SWAPPER_PIXEL_BOOST_DROPDOWN
 
+	has_face_swapper, is_advanced_user = get_visibility_states()
+
 	FACE_SWAPPER_MODEL_DROPDOWN = gradio.Dropdown(
 		label = wording.get('uis.face_swapper_model_dropdown'),
 		choices = processors_choices.face_swapper_set.keys(),
 		value = state_manager.get_item('face_swapper_model'),
-		visible = 'face_swapper' in state_manager.get_item('processors')
+		visible = has_face_swapper and is_advanced_user
 	)
 	FACE_SWAPPER_PIXEL_BOOST_DROPDOWN = gradio.Dropdown(
 		label = wording.get('uis.face_swapper_pixel_boost_dropdown'),
 		choices = processors_choices.face_swapper_set.get(state_manager.get_item('face_swapper_model')),
 		value = state_manager.get_item('face_swapper_pixel_boost'),
-		visible = 'face_swapper' in state_manager.get_item('processors')
+		visible = has_face_swapper
 	)
 	register_ui_component('face_swapper_model_dropdown', FACE_SWAPPER_MODEL_DROPDOWN)
 	register_ui_component('face_swapper_pixel_boost_dropdown', FACE_SWAPPER_PIXEL_BOOST_DROPDOWN)
@@ -43,8 +49,8 @@ def listen() -> None:
 
 
 def remote_update(processors : List[str]) -> Tuple[gradio.Dropdown, gradio.Dropdown]:
-	has_face_swapper = 'face_swapper' in processors
-	return gradio.Dropdown(visible = has_face_swapper), gradio.Dropdown(visible = has_face_swapper)
+	has_face_swapper, is_advanced_user = get_visibility_states()
+	return gradio.Dropdown(visible = has_face_swapper and is_advanced_user), gradio.Dropdown(visible = has_face_swapper)
 
 
 def update_face_swapper_model(face_swapper_model : FaceSwapperModel) -> Tuple[gradio.Dropdown, gradio.Dropdown]:

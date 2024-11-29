@@ -217,11 +217,11 @@ def apply_fran_re_aging(input_array, window_size, stride, mask_array, small_mask
 
 def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
 	age_modifier_model = state_manager.get_item('age_modifier_model')
-	
+
 	if age_modifier_model == 'fran':
 		# estimate age
 		source_age_estimate = np.mean(target_face.age)
-		print(source_age_estimate)
+		state_manager.set_item('current_source_age_estimate', source_age_estimate)
 
 		# Load model options and masks
 		mask_path = get_model_options().get('sources').get("mask").get("path")
