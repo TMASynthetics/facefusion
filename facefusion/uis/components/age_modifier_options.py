@@ -20,8 +20,8 @@ AGE_MODIFIER_SHOW_MASK : Optional[gradio.Radio] = None
 def get_visibility_states():
 	has_age_modifier = 'age_modifier' in state_manager.get_item('processors')
 	has_fran = 'fran' in state_manager.get_item('age_modifier_model')
-	advanced_user = state_manager.get_item('advanced_user') == True
-	return has_age_modifier, has_fran, advanced_user
+	is_advanced_user = state_manager.get_item('advanced_user') == True
+	return has_age_modifier, has_fran, is_advanced_user
 
 def render() -> None:
 

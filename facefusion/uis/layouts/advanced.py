@@ -9,6 +9,13 @@ def pre_check() -> bool:
 	return True
 
 
+def toggle_source_visibility(selected_processors):
+    # check if one processor need the source window
+    requires_source = any(
+        processor in processors.processors_requiring_source() for processor in selected_processors
+    )
+    return gradio.update(visible=requires_source)
+
 def render() -> gradio.Blocks:
 	with gradio.Blocks() as layout:
 		# Advanced_user visibility functionnalies and blocks
@@ -21,8 +28,11 @@ def render() -> gradio.Blocks:
 				gradio.update(visible=True), # basic_block2
 				gradio.update(visible=advanced_user), # advanced_block2
 				gradio.update(visible=advanced_user), # advanced_block3
-				gradio.update(visible=advanced_user), # age_modifier_stride_slider
+				gradio.update(visible=advanced_user), # age_modifier_stride slider
 				gradio.update(visible=advanced_user), # face_swapper_model_dropdown
+				gradio.update(visible=advanced_user), # log_level dropdown
+				gradio.update(visible=advanced_user), # face_mask_blur slider
+				gradio.update(visible=advanced_user), # output output_path
 			]
 		
 		with gradio.Row():
@@ -78,7 +88,7 @@ def render() -> gradio.Blocks:
 
 			# Column 2
 			with gradio.Column(scale = 4):
-				with gradio.Blocks():
+				with gradio.Group(visible=False) as source_group:
 					source.render()
 				with gradio.Blocks():
 					target.render()
@@ -106,7 +116,7 @@ def render() -> gradio.Blocks:
 					face_selector.render()
 				with gradio.Blocks():
 					face_masker.render()
-					
+
 				with gradio.Group(visible=state_manager.get_item('advanced_user')) as advanced_block3:
 					with gradio.Blocks():
 						face_detector.render()
@@ -122,7 +132,17 @@ def render() -> gradio.Blocks:
 			outputs=[basic_block1, advanced_block1, basic_block2, advanced_block2, advanced_block3, 
 			age_modifier_options.AGE_MODIFIER_STRIDE_SLIDER,
 			face_swapper_options.FACE_SWAPPER_MODEL_DROPDOWN,
+			terminal.LOG_LEVEL_DROPDOWN,
+			face_masker.FACE_MASK_BLUR_SLIDER,
+			output.OUTPUT_PATH_TEXTBOX
 			]
+		)
+
+		# Connect Processors to Source
+		processors.PROCESSORS_CHECKBOX_GROUP.change(
+			toggle_source_visibility,
+			inputs=[processors.PROCESSORS_CHECKBOX_GROUP],
+			outputs=[source_group]
 		)
 	return layout
 

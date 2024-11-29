@@ -14,8 +14,8 @@ FACE_SWAPPER_PIXEL_BOOST_DROPDOWN : Optional[gradio.Dropdown] = None
 
 def get_visibility_states():
 	has_face_swapper = 'face_swapper' in state_manager.get_item('processors')
-	advanced_user = state_manager.get_item('advanced_user') == True
-	return has_face_swapper, advanced_user
+	is_advanced_user = state_manager.get_item('advanced_user') == True
+	return has_face_swapper, is_advanced_user
 
 def render() -> None:
 	global FACE_SWAPPER_MODEL_DROPDOWN
