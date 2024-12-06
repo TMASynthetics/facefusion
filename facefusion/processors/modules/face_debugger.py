@@ -78,7 +78,6 @@ def debug_face(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 
 	if 'bounding-box' in face_debugger_items:
 		x1, y1, x2, y2 = bounding_box
-		print("face_debugger.bounding_box", bounding_box)
 		cv2.rectangle(temp_vision_frame, (x1, y1), (x2, y2), primary_color, 2)
 
 		if target_face.angle == 0:
@@ -89,6 +88,27 @@ def debug_face(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 			cv2.line(temp_vision_frame, (x2, y1), (x2, y2), primary_light_color, 3)
 		elif target_face.angle == 270:
 			cv2.line(temp_vision_frame, (x1, y1), (x1, y2), primary_light_color, 3)
+
+	if 'fran-box' in face_debugger_items:
+		x1, y1, x2, y2 = bounding_box
+		
+		face_mask_padding = state_manager.get_item("face_mask_padding") # top, right, bottom, left
+		x1 += face_mask_padding[3]
+		y1 += face_mask_padding[0]
+		x2 -= face_mask_padding[1]
+		y2 += face_mask_padding[2]
+
+		margin_y_t = int((y2 - y1) * .63 * .85)  # Calculate the top margin to extend above the face for better coverage.
+		margin_y_b = int((y2 - y1) * .37 * .85)  # Calculate the bottom margin.
+		margin_x = int((x2 - x1) // (2 / .85))  # Calculate the horizontal margin for a square crop.
+		margin_y_t += 2 * margin_x - margin_y_t - margin_y_b  # Adjust the top margin to ensure a square crop.
+		
+		l_y = int(max([y1 - margin_y_t, 0]))  # Determine the top boundary of the crop, ensuring it doesn't go below zero.
+		r_y = int(min([y2 + margin_y_b, temp_vision_frame.shape[0]]))  # Determine the bottom boundary, ensuring it stays within the image height.
+		l_x = int(max([x1 - margin_x, 0]))  # Determine the left boundary of the crop.
+		r_x = int(min([x2 + margin_x, temp_vision_frame.shape[1]]))  # Determine the right boundary.
+		cv2.rectangle(temp_vision_frame, (l_x, l_y), (r_x, r_y), (0, 0, 255), 3)
+
 
 	if 'face-mask' in face_debugger_items:
 		crop_vision_frame, affine_matrix = warp_face_by_face_landmark_5(temp_vision_frame, target_face.landmark_set.get('5/68'), 'arcface_128_v2', (512, 512))
