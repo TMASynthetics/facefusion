@@ -51,8 +51,7 @@ commands:
     job-retry                                     retry a failed job
     job-retry-all                                 retry all failed jobs
 
-# advanced user layout
-python facefusion.py run --ui-layouts advanced
+
 ```
 
 
