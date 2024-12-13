@@ -29,7 +29,7 @@ def listen() -> None:
 def update_processors(processors : List[str]) -> gradio.CheckboxGroup:
 	clear_processors_modules(state_manager.get_item('processors'))
 	state_manager.set_item('processors', processors)
-
+	
 	for processor_module in get_processors_modules(state_manager.get_item('processors')):
 		if not processor_module.pre_check():
 			return gradio.CheckboxGroup()

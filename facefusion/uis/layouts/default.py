@@ -6,6 +6,7 @@ from facefusion.uis.components import about, age_modifier_options, common_option
 
 def pre_check() -> bool:
 	state_manager.set_item('advanced_user', False)
+	age_modifier_options.render() # avoid Key Error at launch
 	return True
 
 
@@ -88,7 +89,7 @@ def render() -> gradio.Blocks:
 
 			# Column 2
 			with gradio.Column(scale = 4):
-				with gradio.Group(visible=False) as source_group:
+				with gradio.Group(visible=True) as source_group:
 					source.render()
 				with gradio.Blocks():
 					target.render()

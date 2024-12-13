@@ -23,7 +23,8 @@ def render() -> None:
 	COMMON_OPTIONS_CHECKBOX_GROUP = gradio.Checkboxgroup(
 		label = wording.get('uis.common_options_checkbox_group'),
 		choices = uis_choices.common_options,
-		value = common_options
+		value = common_options,
+		interactive=True
 	)
 
 

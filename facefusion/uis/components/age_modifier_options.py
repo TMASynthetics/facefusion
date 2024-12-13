@@ -8,6 +8,7 @@ from facefusion.processors import choices as processors_choices
 from facefusion.processors.core import load_processor_module
 from facefusion.processors.typing import AgeModifierModel
 from facefusion.uis.core import get_ui_component, register_ui_component
+import time
 
 AGE_MODIFIER_MODEL_DROPDOWN : Optional[gradio.Dropdown] = None
 AGE_MODIFIER_DIRECTION_SLIDER : Optional[gradio.Slider] = None
@@ -19,7 +20,7 @@ AGE_MODIFIER_SHOW_MASK : Optional[gradio.Radio] = None
 
 def get_visibility_states():
 	has_age_modifier = 'age_modifier' in state_manager.get_item('processors')
-	has_fran = 'fran' in state_manager.get_item('age_modifier_model')
+	has_fran = has_age_modifier and ('fran' in state_manager.get_item('age_modifier_model'))
 	is_advanced_user = state_manager.get_item('advanced_user') == True
 	return has_age_modifier, has_fran, is_advanced_user
 
@@ -32,7 +33,7 @@ def render() -> None:
 	global AGE_MODIFIER_TARGET_AGE_SLIDER
 	global AGE_MODIFIER_STRIDE_SLIDER
 	global AGE_MODIFIER_SHOW_MASK
-
+	
 	has_age_modifier, has_fran, is_advanced_user = get_visibility_states()
 
 	AGE_MODIFIER_MODEL_DROPDOWN = gradio.Dropdown(
@@ -106,12 +107,16 @@ def listen() -> None:
 	AGE_MODIFIER_SHOW_MASK.change(change_age_modifier_show_mask, inputs = AGE_MODIFIER_SHOW_MASK, outputs = AGE_MODIFIER_SHOW_MASK)
 
 	processors_checkbox_group = get_ui_component('processors_checkbox_group')
+
 	if processors_checkbox_group:
-		processors_checkbox_group.change(remote_update, inputs = processors_checkbox_group, outputs = [ AGE_MODIFIER_MODEL_DROPDOWN, AGE_MODIFIER_DIRECTION_SLIDER, AGE_MODIFIER_INFER_SOURCE_AGE, AGE_MODIFIER_SOURCE_AGE_SLIDER, AGE_MODIFIER_TARGET_AGE_SLIDER, AGE_MODIFIER_STRIDE_SLIDER, AGE_MODIFIER_SHOW_MASK ])
+		processors_checkbox_group.change(remote_update, outputs = [ AGE_MODIFIER_MODEL_DROPDOWN, AGE_MODIFIER_DIRECTION_SLIDER, AGE_MODIFIER_INFER_SOURCE_AGE, AGE_MODIFIER_SOURCE_AGE_SLIDER, AGE_MODIFIER_TARGET_AGE_SLIDER, AGE_MODIFIER_STRIDE_SLIDER, AGE_MODIFIER_SHOW_MASK ])
 
 
-def remote_update(processors : List[str]) -> Tuple[gradio.Dropdown, gradio.Slider, gradio.Button, gradio.Slider, gradio.Slider, gradio.Slider, gradio.CheckboxGroup]:
+def remote_update() -> Tuple[gradio.Dropdown, gradio.Slider, gradio.Button, gradio.Slider, gradio.Slider, gradio.Slider, gradio.CheckboxGroup]:
 	has_age_modifier, has_fran, is_advanced_user = get_visibility_states()
+	time.sleep(1) # avoir some random latency with catching the state change in processors
+	has_age_modifier, has_fran, is_advanced_user = get_visibility_states()
+	
 	# model_dropdown, direction_slider, infer_source_age_button, source_slider, target_slider, conv_window_slider
 	return gradio.Dropdown(visible = has_age_modifier), gradio.Slider(visible = has_age_modifier and not has_fran), gradio.Button(visible = has_age_modifier and has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible = is_advanced_user and has_age_modifier and has_fran), gradio.CheckboxGroup(visible = has_age_modifier and has_fran)
 
