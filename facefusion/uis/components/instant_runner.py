@@ -49,11 +49,13 @@ def render() -> None:
 def listen() -> None:
 	output_image = get_ui_component('output_image')
 	output_video = get_ui_component('output_video')
+	output_video_mask = get_ui_component('output_video_mask')
+	output_image_mask = get_ui_component('output_image_mask')
 	ui_workflow_dropdown = get_ui_component('ui_workflow_dropdown')
 
 	if output_image and output_video:
 		INSTANT_RUNNER_START_BUTTON.click(start, outputs = [ INSTANT_RUNNER_START_BUTTON, INSTANT_RUNNER_STOP_BUTTON ])
-		INSTANT_RUNNER_START_BUTTON.click(run, outputs = [ INSTANT_RUNNER_START_BUTTON, INSTANT_RUNNER_STOP_BUTTON, output_image, output_video ])
+		INSTANT_RUNNER_START_BUTTON.click(run, outputs = [ INSTANT_RUNNER_START_BUTTON, INSTANT_RUNNER_STOP_BUTTON, output_image, output_image_mask, output_video, output_video_mask])
 		INSTANT_RUNNER_STOP_BUTTON.click(stop, outputs = [ INSTANT_RUNNER_START_BUTTON, INSTANT_RUNNER_STOP_BUTTON ])
 		INSTANT_RUNNER_CLEAR_BUTTON.click(clear, outputs = [ output_image, output_video ])
 	if ui_workflow_dropdown:
@@ -72,7 +74,7 @@ def start() -> Tuple[gradio.Button, gradio.Button]:
 	return gradio.Button(visible = False), gradio.Button(visible = True)
 
 
-def run() -> Tuple[gradio.Button, gradio.Button, gradio.Image, gradio.Video]:
+def run() -> Tuple[gradio.Button, gradio.Button, gradio.Image, gradio.Image, gradio.Video, gradio.Video]:
 	step_args = collect_step_args()
 	output_path = step_args.get('output_path')
 
@@ -82,10 +84,11 @@ def run() -> Tuple[gradio.Button, gradio.Button, gradio.Image, gradio.Video]:
 		create_and_run_job(step_args)
 		state_manager.set_item('output_path', output_path)
 	if is_image(step_args.get('output_path')):
-		return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = step_args.get('output_path'), visible = True), gradio.Video(value = None, visible = False)
+		return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = step_args.get('output_path'), visible = True), gradio.Image(value = step_args.get('output_path').split('.')[0] + '_mask.' + step_args.get('output_path').split('.')[1], visible = True), gradio.Video(value = None, visible = False), gradio.Video(value = None, visible = False)
 	if is_video(step_args.get('output_path')):
-		return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None, visible = False), gradio.Video(value = step_args.get('output_path'), visible = True)
-	return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None), gradio.Video(value = None)
+		return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None, visible = False), gradio.Image(value = None, visible = False), gradio.Video(value = step_args.get('output_path'), visible = True), gradio.Video(value = step_args.get('output_path').split('.')[0] + '_mask.' + step_args.get('output_path').split('.')[1], visible = True)
+	
+	return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None), gradio.Video(value = None), gradio.Video(value = None)
 
 
 def create_and_run_job(step_args : Args) -> bool:

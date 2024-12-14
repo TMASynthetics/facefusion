@@ -111,6 +111,7 @@ def debug_face(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		crop_mask = numpy.minimum.reduce(crop_masks).clip(0, 1)
 		crop_mask = (crop_mask * 255).astype(numpy.uint8)
 		inverse_vision_frame = cv2.warpAffine(crop_mask, inverse_matrix, temp_size)
+		temp_vision_frame_mask = inverse_vision_frame.copy()
 		inverse_vision_frame = cv2.threshold(inverse_vision_frame, 100, 255, cv2.THRESH_BINARY)[1]
 		inverse_vision_frame[inverse_vision_frame > 0] = 255 #type:ignore[operator]
 		inverse_contours = cv2.findContours(inverse_vision_frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)[0]
@@ -165,7 +166,7 @@ def debug_face(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 			top = top + 20
 			cv2.putText(temp_vision_frame, face_race_text, (left, top), cv2.FONT_HERSHEY_SIMPLEX, 0.5, primary_color, 2)
 
-	return temp_vision_frame
+	return temp_vision_frame, temp_vision_frame_mask
 
 
 def get_reference_frame(source_face : Face, target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
@@ -175,22 +176,23 @@ def get_reference_frame(source_face : Face, target_face : Face, temp_vision_fram
 def process_frame(inputs : FaceDebuggerInputs) -> VisionFrame:
 	reference_faces = inputs.get('reference_faces')
 	target_vision_frame = inputs.get('target_vision_frame')
+	temp_vision_frame_mask = inputs.get('target_vision_frame')
 	many_faces = sort_and_filter_faces(get_many_faces([ target_vision_frame ]))
 
 	if state_manager.get_item('face_selector_mode') == 'many':
 		if many_faces:
 			for target_face in many_faces:
-				target_vision_frame = debug_face(target_face, target_vision_frame)
+				target_vision_frame, temp_vision_frame_mask = debug_face(target_face, target_vision_frame)
 	if state_manager.get_item('face_selector_mode') == 'one':
 		target_face = get_one_face(many_faces)
 		if target_face:
-			target_vision_frame = debug_face(target_face, target_vision_frame)
+			target_vision_frame, temp_vision_frame_mask = debug_face(target_face, target_vision_frame)
 	if state_manager.get_item('face_selector_mode') == 'reference':
 		similar_faces = find_similar_faces(many_faces, reference_faces, state_manager.get_item('reference_face_distance'))
 		if similar_faces:
 			for similar_face in similar_faces:
-				target_vision_frame = debug_face(similar_face, target_vision_frame)
-	return target_vision_frame
+				target_vision_frame, temp_vision_frame_mask = debug_face(similar_face, target_vision_frame)
+	return target_vision_frame, temp_vision_frame_mask
 
 
 def process_frames(source_paths : List[str], queue_payloads : List[QueuePayload], update_progress : UpdateProgress) -> None:
@@ -199,25 +201,28 @@ def process_frames(source_paths : List[str], queue_payloads : List[QueuePayload]
 	for queue_payload in process_manager.manage(queue_payloads):
 		target_vision_path = queue_payload['frame_path']
 		target_vision_frame = read_image(target_vision_path)
-		output_vision_frame = process_frame(
+		output_vision_frame, temp_vision_frame_mask = process_frame(
 		{
 			'reference_faces': reference_faces,
 			'target_vision_frame': target_vision_frame
 		})
 		write_image(target_vision_path, output_vision_frame)
+		# write mask
+		write_image(target_vision_path.split('.')[0] + '_mask.' + target_vision_path.split('.')[1], temp_vision_frame_mask)
 		update_progress(1)
 
 
 def process_image(source_paths : List[str], target_path : str, output_path : str) -> None:
 	reference_faces = get_reference_faces() if 'reference' in state_manager.get_item('face_selector_mode') else None
 	target_vision_frame = read_static_image(target_path)
-	output_vision_frame = process_frame(
+	output_vision_frame, output_vision_frame_mask = process_frame(
 	{
 		'reference_faces': reference_faces,
 		'target_vision_frame': target_vision_frame
 	})
 	write_image(output_path, output_vision_frame)
-
+	# write mask
+	write_image(output_path.split('.')[0] + '_mask.' + output_path.split('.')[1], output_vision_frame_mask)
 
 def process_video(source_paths : List[str], temp_frame_paths : List[str]) -> None:
 	processors.multi_process_frames(source_paths, temp_frame_paths, process_frames)

@@ -401,8 +401,8 @@ def swap_face(source_face : Face, target_face : Face, temp_vision_frame : Vision
 		crop_masks.append(region_mask)
 
 	crop_mask = numpy.minimum.reduce(crop_masks).clip(0, 1)
-	temp_vision_frame = paste_back(temp_vision_frame, crop_vision_frame, crop_mask, affine_matrix)
-	return temp_vision_frame
+	temp_vision_frame, temp_vision_frame_mask = paste_back(temp_vision_frame, crop_vision_frame, crop_mask, affine_matrix)
+	return temp_vision_frame, temp_vision_frame_mask
 
 
 def forward_swap_face(source_face : Face, crop_vision_frame : VisionFrame) -> VisionFrame:
@@ -508,22 +508,23 @@ def process_frame(inputs : FaceSwapperInputs) -> VisionFrame:
 	reference_faces = inputs.get('reference_faces')
 	source_face = inputs.get('source_face')
 	target_vision_frame = inputs.get('target_vision_frame')
+	temp_vision_frame_mask = inputs.get('target_vision_frame')
 	many_faces = sort_and_filter_faces(get_many_faces([ target_vision_frame ]))
 
 	if state_manager.get_item('face_selector_mode') == 'many':
 		if many_faces:
 			for target_face in many_faces:
-				target_vision_frame = swap_face(source_face, target_face, target_vision_frame)
+				target_vision_frame, temp_vision_frame_mask = swap_face(source_face, target_face, target_vision_frame)
 	if state_manager.get_item('face_selector_mode') == 'one':
 		target_face = get_one_face(many_faces)
 		if target_face:
-			target_vision_frame = swap_face(source_face, target_face, target_vision_frame)
+			target_vision_frame, temp_vision_frame_mask = swap_face(source_face, target_face, target_vision_frame)
 	if state_manager.get_item('face_selector_mode') == 'reference':
 		similar_faces = find_similar_faces(many_faces, reference_faces, state_manager.get_item('reference_face_distance'))
 		if similar_faces:
 			for similar_face in similar_faces:
-				target_vision_frame = swap_face(source_face, similar_face, target_vision_frame)
-	return target_vision_frame
+				target_vision_frame, temp_vision_frame_mask = swap_face(source_face, similar_face, target_vision_frame)
+	return target_vision_frame, temp_vision_frame_mask
 
 
 def process_frames(source_paths : List[str], queue_payloads : List[QueuePayload], update_progress : UpdateProgress) -> None:
@@ -535,13 +536,15 @@ def process_frames(source_paths : List[str], queue_payloads : List[QueuePayload]
 	for queue_payload in process_manager.manage(queue_payloads):
 		target_vision_path = queue_payload['frame_path']
 		target_vision_frame = read_image(target_vision_path)
-		output_vision_frame = process_frame(
+		output_vision_frame, temp_vision_frame_mask = process_frame(
 		{
 			'reference_faces': reference_faces,
 			'source_face': source_face,
 			'target_vision_frame': target_vision_frame
 		})
 		write_image(target_vision_path, output_vision_frame)
+		# write mask
+		write_image(target_vision_path.split('.')[0] + '_mask.' + target_vision_path.split('.')[1], (temp_vision_frame_mask*255).astype(numpy.uint8))
 		update_progress(1)
 
 
@@ -551,14 +554,15 @@ def process_image(source_paths : List[str], target_path : str, output_path : str
 	source_faces = get_many_faces(source_frames)
 	source_face = get_average_face(source_faces)
 	target_vision_frame = read_static_image(target_path)
-	output_vision_frame = process_frame(
+	output_vision_frame, output_vision_frame_mask = process_frame(
 	{
 		'reference_faces': reference_faces,
 		'source_face': source_face,
 		'target_vision_frame': target_vision_frame
 	})
 	write_image(output_path, output_vision_frame)
-
+	# write mask
+	write_image(output_path.split('.')[0] + '_mask.' + output_path.split('.')[1], (output_vision_frame_mask*255).astype(numpy.uint8))
 
 def process_video(source_paths : List[str], temp_frame_paths : List[str]) -> None:
 	processors.multi_process_frames(source_paths, temp_frame_paths, process_frames)

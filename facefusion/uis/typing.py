@@ -60,6 +60,7 @@ ComponentName = Literal\
 	'lip_syncer_model_dropdown',
 	'output_image',
 	'output_video',
+	'output_mask',
 	'output_video_fps_slider',
 	'preview_frame_slider',
 	'processors_checkbox_group',

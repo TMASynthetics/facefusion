@@ -7,14 +7,17 @@ from facefusion import state_manager
 from facefusion.filesystem import create_directory, move_file, remove_directory
 
 
-def get_temp_file_path(file_path : str) -> str:
+def get_temp_file_path(file_path : str, is_mask : bool = False) -> str:
 	_, temp_file_extension = os.path.splitext(os.path.basename(file_path))
 	temp_directory_path = get_temp_directory_path(file_path)
-	return os.path.join(temp_directory_path, 'temp' + temp_file_extension)
+	if is_mask:
+		return os.path.join(temp_directory_path, 'temp_mask' + temp_file_extension)
+	else:
+		return os.path.join(temp_directory_path, 'temp' + temp_file_extension)	
 
 
-def move_temp_file(file_path : str, move_path : str) -> bool:
-	temp_file_path = get_temp_file_path(file_path)
+def move_temp_file(file_path : str, move_path : str, is_mask : bool = False) -> bool:
+	temp_file_path = get_temp_file_path(file_path, is_mask=True)
 	return move_file(temp_file_path, move_path)
 
 

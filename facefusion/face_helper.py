@@ -5,7 +5,10 @@ import cv2
 import numpy
 from cv2.typing import Size
 
+from facefusion import state_manager
+from facefusion.temp_helper import get_temp_directory_path, get_temp_frame_paths, get_temp_frames_pattern
 from facefusion.typing import Anchors, Angle, BoundingBox, Distance, FaceDetectorModel, FaceLandmark5, FaceLandmark68, Mask, Matrix, Points, Scale, Score, Translation, VisionFrame, WarpTemplate, WarpTemplateSet
+from facefusion.vision import write_image
 
 WARP_TEMPLATES : WarpTemplateSet =\
 {
@@ -83,7 +86,7 @@ def paste_back(temp_vision_frame : VisionFrame, crop_vision_frame : VisionFrame,
 	paste_vision_frame[:, :, 0] = inverse_mask * inverse_vision_frame[:, :, 0] + (1 - inverse_mask) * temp_vision_frame[:, :, 0]
 	paste_vision_frame[:, :, 1] = inverse_mask * inverse_vision_frame[:, :, 1] + (1 - inverse_mask) * temp_vision_frame[:, :, 1]
 	paste_vision_frame[:, :, 2] = inverse_mask * inverse_vision_frame[:, :, 2] + (1 - inverse_mask) * temp_vision_frame[:, :, 2]
-	return paste_vision_frame
+	return paste_vision_frame, inverse_mask
 
 
 @lru_cache(maxsize = None)

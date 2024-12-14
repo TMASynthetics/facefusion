@@ -95,10 +95,17 @@ def extract_frames(target_path : str, temp_video_resolution : str, temp_video_fp
 	return run_ffmpeg(commands).returncode == 0
 
 
-def merge_video(target_path : str, output_video_resolution : str, output_video_fps : Fps) -> bool:
+def merge_video(target_path : str, output_video_resolution : str, output_video_fps : Fps, is_mask : bool = False) -> bool:
 	temp_video_fps = restrict_video_fps(target_path, output_video_fps)
 	temp_file_path = get_temp_file_path(target_path)
-	temp_frames_pattern = get_temp_frames_pattern(target_path, '%08d')
+
+	if is_mask:
+		temp_file_path = temp_file_path.split('.')[0] + '_mask.' + temp_file_path.split('.')[1]
+		frames_pattern = '%08d'+'_mask'
+	else:
+		frames_pattern = '%08d'
+
+	temp_frames_pattern = get_temp_frames_pattern(target_path, frames_pattern)
 	commands = [ '-r', str(temp_video_fps), '-i', temp_frames_pattern, '-s', str(output_video_resolution), '-c:v', state_manager.get_item('output_video_encoder') ]
 
 	if state_manager.get_item('output_video_encoder') in [ 'libx264', 'libx265' ]:
@@ -149,8 +156,10 @@ def copy_image(target_path : str, temp_image_resolution : str) -> bool:
 	return run_ffmpeg(commands).returncode == 0
 
 
-def finalize_image(target_path : str, output_path : str, output_image_resolution : str) -> bool:
+def finalize_image(target_path : str, output_path : str, output_image_resolution : str, is_mask : bool = False) -> bool:
 	temp_file_path = get_temp_file_path(target_path)
+	if is_mask:
+		temp_file_path = temp_file_path.split('.')[0] + '_mask.' + temp_file_path.split('.')[1]
 	output_image_compression = calc_image_compression(target_path, state_manager.get_item('output_image_quality'))
 	commands = [ '-i', temp_file_path, '-s', str(output_image_resolution), '-q:v', str(output_image_compression), '-y', output_path ]
 	return run_ffmpeg(commands).returncode == 0
