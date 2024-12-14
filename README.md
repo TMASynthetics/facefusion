@@ -50,8 +50,6 @@ commands:
     job-run-all                                   run all queued jobs
     job-retry                                     retry a failed job
     job-retry-all                                 retry all failed jobs
-
-
 ```
 
 

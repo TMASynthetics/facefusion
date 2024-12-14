@@ -17,8 +17,7 @@ def render() -> None:
 		value = state_manager.get_item('execution_queue_count'),
 		step = calc_int_step(facefusion.choices.execution_queue_count_range),
 		minimum = facefusion.choices.execution_queue_count_range[0],
-		maximum = facefusion.choices.execution_queue_count_range[-1],
-		interactive=True
+		maximum = facefusion.choices.execution_queue_count_range[-1]
 	)
 
 
