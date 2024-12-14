@@ -8,6 +8,7 @@ from facefusion.processors.core import clear_processors_modules, get_processors_
 from facefusion.uis.core import register_ui_component
 
 PROCESSORS_CHECKBOX_GROUP : Optional[gradio.CheckboxGroup] = None
+PROCESSORS_REQUIRING_SOURCE = ['face_swapper', "lip_syncer"]
 
 
 def render() -> None:
@@ -28,7 +29,7 @@ def listen() -> None:
 def update_processors(processors : List[str]) -> gradio.CheckboxGroup:
 	clear_processors_modules(state_manager.get_item('processors'))
 	state_manager.set_item('processors', processors)
-
+	
 	for processor_module in get_processors_modules(state_manager.get_item('processors')):
 		if not processor_module.pre_check():
 			return gradio.CheckboxGroup()
@@ -38,3 +39,7 @@ def update_processors(processors : List[str]) -> gradio.CheckboxGroup:
 def sort_processors(processors : List[str]) -> List[str]:
 	available_processors = list_directory('facefusion/processors/modules')
 	return sorted(available_processors, key = lambda processor : processors.index(processor) if processor in processors else len(processors))
+
+
+def processors_requiring_source() -> List[str]:
+	return PROCESSORS_REQUIRING_SOURCE
