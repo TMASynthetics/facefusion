@@ -6,7 +6,7 @@ from facefusion.uis.components import about, age_modifier_options, common_option
 
 def pre_check() -> bool:
 	state_manager.set_item('advanced_user', False)
-	age_modifier_options.render() # avoid Key Error at launch
+	#age_modifier_options.render() # avoid Key Error at launch
 	return True
 
 
@@ -171,16 +171,14 @@ def listen() -> None:
 	trim_frame.listen()
 	face_selector.listen()
 	face_masker.listen()
-	
-	if state_manager.get_item('advanced_user') == True:
-		execution.listen()
-		execution_thread_count.listen()
-		execution_queue_count.listen()
-		memory.listen()
-		instant_runner.listen()
-		face_detector.listen()
-		face_landmarker.listen()
-		common_options.listen()
+	execution.listen()
+	execution_thread_count.listen() 
+	execution_queue_count.listen()
+	memory.listen()
+	instant_runner.listen()
+	face_detector.listen()
+	face_landmarker.listen()
+	common_options.listen()
 
 
 
