@@ -72,6 +72,7 @@ def debug_face(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 	tertiary_color = (255, 255, 0)
 	bounding_box = target_face.bounding_box.astype(numpy.int32)
 	temp_vision_frame = temp_vision_frame.copy()
+	temp_vision_frame_mask = temp_vision_frame.copy()
 	has_face_landmark_5_fallback = numpy.array_equal(target_face.landmark_set.get('5'), target_face.landmark_set.get('5/68'))
 	has_face_landmark_68_fallback = numpy.array_equal(target_face.landmark_set.get('68'), target_face.landmark_set.get('68/5'))
 	face_debugger_items = state_manager.get_item('face_debugger_items')
@@ -170,7 +171,7 @@ def debug_face(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 
 
 def get_reference_frame(source_face : Face, target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
-	pass
+	None, None
 
 
 def process_frame(inputs : FaceDebuggerInputs) -> VisionFrame:
