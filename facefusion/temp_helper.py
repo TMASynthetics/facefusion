@@ -17,7 +17,7 @@ def get_temp_file_path(file_path : str, is_mask : bool = False) -> str:
 
 
 def move_temp_file(file_path : str, move_path : str, is_mask : bool = False) -> bool:
-	temp_file_path = get_temp_file_path(file_path, is_mask=True)
+	temp_file_path = get_temp_file_path(file_path, is_mask=is_mask)
 	return move_file(temp_file_path, move_path)
 
 
