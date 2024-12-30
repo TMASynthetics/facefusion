@@ -1,4 +1,5 @@
 from typing import List, Optional, Tuple
+import time
 
 import gradio
 
@@ -112,9 +113,9 @@ def listen() -> None:
 
 
 def remote_update() -> Tuple[gradio.Dropdown, gradio.Slider, gradio.Button, gradio.Slider, gradio.Slider, gradio.Slider, gradio.CheckboxGroup]:
-
+	time.sleep(1)
 	has_age_modifier, has_fran, is_advanced_user = get_visibility_states()
-	
+	# print(has_age_modifier, has_fran, is_advanced_user)
 	# model_dropdown, direction_slider, infer_source_age_button, source_slider, target_slider, conv_window_slider
 	return gradio.Dropdown(visible = has_age_modifier), gradio.Slider(visible = has_age_modifier and not has_fran), gradio.Button(visible = has_age_modifier and has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible = has_age_modifier and has_fran), gradio.Slider(visible = is_advanced_user and has_age_modifier and has_fran), gradio.CheckboxGroup(visible = has_age_modifier and has_fran)
 
