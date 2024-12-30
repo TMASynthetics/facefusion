@@ -8,7 +8,7 @@ from facefusion.processors import choices as processors_choices
 from facefusion.processors.core import load_processor_module
 from facefusion.processors.typing import AgeModifierModel
 from facefusion.uis.core import get_ui_component, register_ui_component
-import time
+
 
 AGE_MODIFIER_MODEL_DROPDOWN : Optional[gradio.Dropdown] = None
 AGE_MODIFIER_DIRECTION_SLIDER : Optional[gradio.Slider] = None
@@ -95,8 +95,6 @@ def render() -> None:
 	register_ui_component('age_modifier_stride_slider', AGE_MODIFIER_STRIDE_SLIDER)
 	register_ui_component('age_modifier_show_mask', AGE_MODIFIER_SHOW_MASK)
 
-
-
 def listen() -> None:
 	AGE_MODIFIER_MODEL_DROPDOWN.change(update_age_modifier_model, inputs = AGE_MODIFIER_MODEL_DROPDOWN, outputs = [ AGE_MODIFIER_MODEL_DROPDOWN, AGE_MODIFIER_DIRECTION_SLIDER, AGE_MODIFIER_INFER_SOURCE_AGE, AGE_MODIFIER_SOURCE_AGE_SLIDER, AGE_MODIFIER_TARGET_AGE_SLIDER, AGE_MODIFIER_STRIDE_SLIDER, AGE_MODIFIER_SHOW_MASK ])
 	AGE_MODIFIER_DIRECTION_SLIDER.release(update_age_modifier_direction, inputs = AGE_MODIFIER_DIRECTION_SLIDER)
@@ -113,8 +111,7 @@ def listen() -> None:
 
 
 def remote_update() -> Tuple[gradio.Dropdown, gradio.Slider, gradio.Button, gradio.Slider, gradio.Slider, gradio.Slider, gradio.CheckboxGroup]:
-	has_age_modifier, has_fran, is_advanced_user = get_visibility_states()
-	time.sleep(1) # avoir some random latency with catching the state change in processors
+
 	has_age_modifier, has_fran, is_advanced_user = get_visibility_states()
 	
 	# model_dropdown, direction_slider, infer_source_age_button, source_slider, target_slider, conv_window_slider

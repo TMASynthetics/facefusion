@@ -141,7 +141,7 @@ def conditional_append_reference_faces() -> None:
 
 		if source_face and reference_face:
 			for processor_module in get_processors_modules(state_manager.get_item('processors')):
-				abstract_reference_frame = processor_module.get_reference_frame(source_face, reference_face, reference_frame)
+				abstract_reference_frame, _ = processor_module.get_reference_frame(source_face, reference_face, reference_frame)
 				if numpy.any(abstract_reference_frame):
 					abstract_reference_faces = sort_and_filter_faces(get_many_faces([ abstract_reference_frame ]))
 					abstract_reference_face = get_one_face(abstract_reference_faces, state_manager.get_item('reference_face_position'))
@@ -333,6 +333,10 @@ def process_image(start_time : float) -> ErrorCode:
 	logger.info(wording.get('finalizing_image').format(resolution = state_manager.get_item('output_image_resolution')), __name__)
 	if finalize_image(state_manager.get_item('target_path'), state_manager.get_item('output_path'), state_manager.get_item('output_image_resolution')):
 		logger.debug(wording.get('finalizing_image_succeed'), __name__)
+		# finalize mask image
+		output_mask_path = state_manager.get_item('output_path').split('.')[0] + '_mask.' + state_manager.get_item('output_path').split('.')[1]
+		if finalize_image(state_manager.get_item('target_path'), output_mask_path, state_manager.get_item('output_image_resolution'), is_mask=True):
+			logger.debug(wording.get('finalizing_mask_image_succeed'), __name__)
 	else:
 		logger.warn(wording.get('finalizing_image_skipped'), __name__)
 	# clear temp
@@ -390,7 +394,12 @@ def process_video(start_time : float) -> ErrorCode:
 	# merge video
 	logger.info(wording.get('merging_video').format(resolution = state_manager.get_item('output_video_resolution'), fps = state_manager.get_item('output_video_fps')), __name__)
 	if merge_video(state_manager.get_item('target_path'), state_manager.get_item('output_video_resolution'), state_manager.get_item('output_video_fps')):
-		logger.debug(wording.get('merging_video_succeed'), __name__)
+		logger.debug(wording.get('merging_mask_video_succeed'), __name__)
+		# merge mask video
+		if merge_video(state_manager.get_item('target_path'), state_manager.get_item('output_video_resolution'), state_manager.get_item('output_video_fps'), is_mask=True):
+			logger.debug(wording.get('merging_video_succeed'), __name__)
+			output_mask_path = state_manager.get_item('output_path').split('.')[0] + '_mask.' + state_manager.get_item('output_path').split('.')[1]
+			move_temp_file(state_manager.get_item('target_path'), output_mask_path, is_mask=True)
 	else:
 		if is_process_stopping():
 			process_manager.end()

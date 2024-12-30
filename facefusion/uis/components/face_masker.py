@@ -16,11 +16,6 @@ FACE_MASK_PADDING_RIGHT_SLIDER : Optional[gradio.Slider] = None
 FACE_MASK_PADDING_BOTTOM_SLIDER : Optional[gradio.Slider] = None
 FACE_MASK_PADDING_LEFT_SLIDER : Optional[gradio.Slider] = None
 
-def get_visibility_states():
-	has_box_mask = 'box' in state_manager.get_item('face_mask_types')
-	has_region_mask = 'region' in state_manager.get_item('face_mask_types')
-	is_advanced_user = state_manager.get_item('advanced_user') == True
-	return has_box_mask, has_region_mask, is_advanced_user
 
 def render() -> None:
 	global FACE_MASK_TYPES_CHECKBOX_GROUP
@@ -31,8 +26,8 @@ def render() -> None:
 	global FACE_MASK_PADDING_BOTTOM_SLIDER
 	global FACE_MASK_PADDING_LEFT_SLIDER
 
-	has_box_mask, has_region_mask, is_advanced_user = get_visibility_states()
-
+	has_box_mask = 'box' in state_manager.get_item('face_mask_types')
+	has_region_mask = 'region' in state_manager.get_item('face_mask_types')
 	FACE_MASK_TYPES_CHECKBOX_GROUP = gradio.CheckboxGroup(
 		label = wording.get('uis.face_mask_types_checkbox_group'),
 		choices = facefusion.choices.face_mask_types,
@@ -50,7 +45,7 @@ def render() -> None:
 		minimum = facefusion.choices.face_mask_blur_range[0],
 		maximum = facefusion.choices.face_mask_blur_range[-1],
 		value = state_manager.get_item('face_mask_blur'),
-		visible = has_box_mask and is_advanced_user
+		visible = has_box_mask
 	)
 	with gradio.Group():
 		with gradio.Row():
@@ -108,8 +103,9 @@ def listen() -> None:
 def update_face_mask_types(face_mask_types : List[FaceMaskType]) -> Tuple[gradio.CheckboxGroup, gradio.CheckboxGroup, gradio.Slider, gradio.Slider, gradio.Slider, gradio.Slider, gradio.Slider]:
 	face_mask_types = face_mask_types or facefusion.choices.face_mask_types
 	state_manager.set_item('face_mask_types', face_mask_types)
-	has_box_mask, has_region_mask, is_advanced_user = get_visibility_states()
-	return gradio.CheckboxGroup(value = state_manager.get_item('face_mask_types')), gradio.CheckboxGroup(visible = has_region_mask), gradio.Slider(visible = has_box_mask and is_advanced_user), gradio.Slider(visible = has_box_mask), gradio.Slider(visible = has_box_mask), gradio.Slider(visible = has_box_mask), gradio.Slider(visible = has_box_mask)
+	has_box_mask = 'box' in face_mask_types
+	has_region_mask = 'region' in face_mask_types
+	return gradio.CheckboxGroup(value = state_manager.get_item('face_mask_types')), gradio.CheckboxGroup(visible = has_region_mask), gradio.Slider(visible = has_box_mask), gradio.Slider(visible = has_box_mask), gradio.Slider(visible = has_box_mask), gradio.Slider(visible = has_box_mask), gradio.Slider(visible = has_box_mask)
 
 
 def update_face_mask_regions(face_mask_regions : List[FaceMaskRegion]) -> gradio.CheckboxGroup:

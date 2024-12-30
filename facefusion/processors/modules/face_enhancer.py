@@ -12,7 +12,7 @@ from facefusion.common_helper import create_int_metavar
 from facefusion.download import conditional_download_hashes, conditional_download_sources
 from facefusion.face_analyser import get_many_faces, get_one_face
 from facefusion.face_helper import paste_back, warp_face_by_face_landmark_5
-from facefusion.face_masker import create_occlusion_mask, create_static_box_mask
+from facefusion.face_masker import create_occlusion_mask, create_region_mask, create_static_box_mask
 from facefusion.face_selector import find_similar_faces, sort_and_filter_faces
 from facefusion.face_store import get_reference_faces
 from facefusion.filesystem import in_directory, is_image, is_video, resolve_relative_path, same_file_extension
@@ -284,7 +284,7 @@ def enhance_face(target_face : Face, temp_vision_frame : VisionFrame) -> VisionF
 	model_template = get_model_options().get('template')
 	model_size = get_model_options().get('size')
 	crop_vision_frame, affine_matrix = warp_face_by_face_landmark_5(temp_vision_frame, target_face.landmark_set.get('5/68'), model_template, model_size)
-	box_mask = create_static_box_mask(crop_vision_frame.shape[:2][::-1], state_manager.get_item('face_mask_blur'), (0, 0, 0, 0))
+	box_mask = create_static_box_mask(crop_vision_frame.shape[:2][::-1], state_manager.get_item('face_mask_blur'), state_manager.get_item('face_mask_padding'))
 	crop_masks =\
 	[
 		box_mask
@@ -293,14 +293,18 @@ def enhance_face(target_face : Face, temp_vision_frame : VisionFrame) -> VisionF
 	if 'occlusion' in state_manager.get_item('face_mask_types'):
 		occlusion_mask = create_occlusion_mask(crop_vision_frame)
 		crop_masks.append(occlusion_mask)
+		
+	if 'region' in state_manager.get_item('face_mask_types'):
+		region_mask = create_region_mask(crop_vision_frame, state_manager.get_item('face_mask_regions'))
+		crop_masks.append(region_mask)
 
 	crop_vision_frame = prepare_crop_frame(crop_vision_frame)
 	crop_vision_frame = forward(crop_vision_frame)
 	crop_vision_frame = normalize_crop_frame(crop_vision_frame)
 	crop_mask = numpy.minimum.reduce(crop_masks).clip(0, 1)
-	paste_vision_frame = paste_back(temp_vision_frame, crop_vision_frame, crop_mask, affine_matrix)
+	paste_vision_frame, temp_vision_frame_mask = paste_back(temp_vision_frame, crop_vision_frame, crop_mask, affine_matrix)
 	temp_vision_frame = blend_frame(temp_vision_frame, paste_vision_frame)
-	return temp_vision_frame
+	return temp_vision_frame, temp_vision_frame_mask
 
 
 def forward(crop_vision_frame : VisionFrame) -> VisionFrame:
@@ -349,22 +353,23 @@ def get_reference_frame(source_face : Face, target_face : Face, temp_vision_fram
 def process_frame(inputs : FaceEnhancerInputs) -> VisionFrame:
 	reference_faces = inputs.get('reference_faces')
 	target_vision_frame = inputs.get('target_vision_frame')
+	temp_vision_frame_mask = inputs.get('target_vision_frame')
 	many_faces = sort_and_filter_faces(get_many_faces([ target_vision_frame ]))
 
 	if state_manager.get_item('face_selector_mode') == 'many':
 		if many_faces:
 			for target_face in many_faces:
-				target_vision_frame = enhance_face(target_face, target_vision_frame)
+				target_vision_frame, temp_vision_frame_mask = enhance_face(target_face, target_vision_frame)
 	if state_manager.get_item('face_selector_mode') == 'one':
 		target_face = get_one_face(many_faces)
 		if target_face:
-			target_vision_frame = enhance_face(target_face, target_vision_frame)
+			target_vision_frame, temp_vision_frame_mask = enhance_face(target_face, target_vision_frame)
 	if state_manager.get_item('face_selector_mode') == 'reference':
 		similar_faces = find_similar_faces(many_faces, reference_faces, state_manager.get_item('reference_face_distance'))
 		if similar_faces:
 			for similar_face in similar_faces:
-				target_vision_frame = enhance_face(similar_face, target_vision_frame)
-	return target_vision_frame
+				target_vision_frame, temp_vision_frame_mask = enhance_face(similar_face, target_vision_frame)
+	return target_vision_frame, temp_vision_frame_mask
 
 
 def process_frames(source_path : List[str], queue_payloads : List[QueuePayload], update_progress : UpdateProgress) -> None:
@@ -373,25 +378,29 @@ def process_frames(source_path : List[str], queue_payloads : List[QueuePayload],
 	for queue_payload in process_manager.manage(queue_payloads):
 		target_vision_path = queue_payload['frame_path']
 		target_vision_frame = read_image(target_vision_path)
-		output_vision_frame = process_frame(
+		output_vision_frame, temp_vision_frame_mask = process_frame(
 		{
 			'reference_faces': reference_faces,
 			'target_vision_frame': target_vision_frame
 		})
 		write_image(target_vision_path, output_vision_frame)
+		# write mask
+		write_image(target_vision_path.split('.')[0] + '_mask.' + target_vision_path.split('.')[1], (temp_vision_frame_mask*255).astype(numpy.uint8))
+		update_progress(1)
 		update_progress(1)
 
 
 def process_image(source_path : str, target_path : str, output_path : str) -> None:
 	reference_faces = get_reference_faces() if 'reference' in state_manager.get_item('face_selector_mode') else None
 	target_vision_frame = read_static_image(target_path)
-	output_vision_frame = process_frame(
+	output_vision_frame, output_vision_frame_mask = process_frame(
 	{
 		'reference_faces': reference_faces,
 		'target_vision_frame': target_vision_frame
 	})
 	write_image(output_path, output_vision_frame)
-
+	# write mask
+	write_image(output_path.split('.')[0] + '_mask.' + output_path.split('.')[1], (output_vision_frame_mask*255).astype(numpy.uint8))
 
 def process_video(source_paths : List[str], temp_frame_paths : List[str]) -> None:
 	processors.multi_process_frames(None, temp_frame_paths, process_frames)

@@ -217,12 +217,7 @@ def apply_fran_re_aging(input_array, window_size, stride, mask_array, small_mask
 
 def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
 	age_modifier_model = state_manager.get_item('age_modifier_model')
-
 	if age_modifier_model == 'fran':
-		# estimate age
-		source_age_estimate = np.mean(target_face.age)
-		state_manager.set_item('current_source_age_estimate', source_age_estimate)
-
 		# Load model options and masks
 		mask_path = get_model_options().get('sources').get("mask").get("path")
 		small_mask_path = get_model_options().get('sources').get("small_mask").get("path")
@@ -265,7 +260,7 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		cropped_image_resized = np.transpose(cropped_image_resized, (2, 0, 1))  # [C, H, W] (3, 1024, 1024)
 
 		# Prepare input array
-		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else source_age_estimate
+		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else 20
 		target_age = state_manager.get_item('age_modifier_target_age') if state_manager.get_item('age_modifier_target_age') else 80
 
 		source_age_channel = np.full_like(cropped_image_resized[:1, :, :], source_age / 100) # create a channel for source_age (1, 1024, 1024)
@@ -284,7 +279,6 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		# Convert to final output format
 		paste_vision_frame = cv2.cvtColor((image * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)  # (H, W, C) [0-255]
 
-
 		# Masking
 		model_template = get_model_options().get('template')
 		#model_size = get_model_options().get('size')
@@ -292,34 +286,21 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		face_landmark_5 = target_face.landmark_set.get('5/68').copy()
 		crop_vision_frame, affine_matrix = warp_face_by_face_landmark_5(paste_vision_frame, face_landmark_5, model_template, model_size)
 		
-		box_mask = create_static_box_mask(crop_vision_frame.shape[:2], state_manager.get_item('face_mask_blur'), (0, 0, 0, 0))
-		#print("box_mask.shape", box_mask.shape)
-		# cv2.imwrite("data/tests/mask_temp_vision_frame.jpg", temp_vision_frame)
-		# cv2.imwrite("data/tests/mask_crop_vision_frame.jpg", crop_vision_frame)
-		# cv2.imwrite("data/tests/mask_box_mask.jpg", box_mask*255.)
-		
-		crop_masks =\
-		[
-		box_mask
-		]
+		box_mask = create_static_box_mask(crop_vision_frame.shape[:2], state_manager.get_item('face_mask_blur'),state_manager.get_item('face_mask_padding'))
+
+		crop_masks =[box_mask]
 
 		if 'occlusion' in state_manager.get_item('face_mask_types'):
 			occlusion_mask = create_occlusion_mask(crop_vision_frame)
-			# cv2.imwrite("data/tests/mask_occlusion_crop_vision_frame.jpg", occlusion_mask*255.)
 			crop_masks.append(occlusion_mask)
 		if 'region' in state_manager.get_item('face_mask_types'):
 			region_mask = create_region_mask(crop_vision_frame, state_manager.get_item('face_mask_regions'))
 			# cv2.imwrite("data/tests/mask_region_mask.jpg", region_mask*255.)
 			crop_masks.append(region_mask)
-		
 		crop_mask = np.minimum.reduce(crop_masks).clip(0, 1)
 		
-		# cv2.imwrite("data/tests/mask_reduced_crop_mask.jpg", crop_mask*255.)
-
-		paste_vision_frame = paste_back(temp_vision_frame, crop_vision_frame, crop_mask, affine_matrix)
-		# cv2.imwrite("data/tests/result.jpg", paste_vision_frame)
+		paste_vision_frame, paste_vision_frame_mask = paste_back(temp_vision_frame, crop_vision_frame, crop_mask, affine_matrix)
 		
-
 		# show rectangle to see the cropping rectangle (after the aging process)
 		if state_manager.get_item('age_modifier_show_mask') == "Yes":
 			cv2.rectangle(paste_vision_frame, (l_x, l_y), (r_x, r_y), (0, 0, 255), 3)
@@ -353,9 +334,9 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		extend_vision_frame = fix_color(extend_vision_frame_raw, extend_vision_frame)
 		extend_crop_mask = cv2.pyrUp(np.minimum.reduce(crop_masks).clip(0, 1)) # double the size of the resulting mask
 		extend_affine_matrix *= extend_vision_frame.shape[0] / 512
-		paste_vision_frame = paste_back(temp_vision_frame, extend_vision_frame, extend_crop_mask, extend_affine_matrix)
+		paste_vision_frame, paste_vision_frame_mask = paste_back(temp_vision_frame, extend_vision_frame, extend_crop_mask, extend_affine_matrix)
 
-	return paste_vision_frame
+	return paste_vision_frame, paste_vision_frame_mask
 
 
 def forward(crop_vision_frame : VisionFrame, extend_vision_frame : VisionFrame) -> VisionFrame:
@@ -440,23 +421,24 @@ def get_reference_frame(source_face : Face, target_face : Face, temp_vision_fram
 def process_frame(inputs : AgeModifierInputs) -> VisionFrame:
 	reference_faces = inputs.get('reference_faces')
 	target_vision_frame = inputs.get('target_vision_frame')
+	target_vision_frame_mask = inputs.get('target_vision_frame')
 
 	many_faces = sort_and_filter_faces(get_many_faces([ target_vision_frame ]))
 
 	if state_manager.get_item('face_selector_mode') == 'many':
 		if many_faces:
 			for target_face in many_faces:
-				target_vision_frame = modify_age(target_face, target_vision_frame)
+				target_vision_frame, target_vision_frame_mask = modify_age(target_face, target_vision_frame)
 	if state_manager.get_item('face_selector_mode') == 'one':
 		target_face = get_one_face(many_faces)
 		if target_face:
-			target_vision_frame = modify_age(target_face, target_vision_frame)
+			target_vision_frame, target_vision_frame_mask = modify_age(target_face, target_vision_frame)
 	if state_manager.get_item('face_selector_mode') == 'reference':
 		similar_faces = find_similar_faces(many_faces, reference_faces, state_manager.get_item('reference_face_distance'))
 		if similar_faces:
 			for similar_face in similar_faces:
-				target_vision_frame = modify_age(similar_face, target_vision_frame)
-	return target_vision_frame
+				target_vision_frame, target_vision_frame_mask = modify_age(similar_face, target_vision_frame)
+	return target_vision_frame, target_vision_frame_mask
 
 
 def process_frames(source_path : List[str], queue_payloads : List[QueuePayload], update_progress : UpdateProgress) -> None:
@@ -465,25 +447,27 @@ def process_frames(source_path : List[str], queue_payloads : List[QueuePayload],
 	for queue_payload in process_manager.manage(queue_payloads):
 		target_vision_path = queue_payload['frame_path']
 		target_vision_frame = read_image(target_vision_path)
-		output_vision_frame = process_frame(
+		output_vision_frame, temp_vision_frame_mask = process_frame(
 		{
 			'reference_faces': reference_faces,
 			'target_vision_frame': target_vision_frame
 		})
 		write_image(target_vision_path, output_vision_frame)
+		# write mask
+		write_image(target_vision_path.split('.')[0] + '_mask.' + target_vision_path.split('.')[1], (temp_vision_frame_mask*255).astype(np.uint8))
 		update_progress(1)
-
 
 def process_image(source_path : str, target_path : str, output_path : str) -> None:
 	reference_faces = get_reference_faces() if 'reference' in state_manager.get_item('face_selector_mode') else None
 	target_vision_frame = read_static_image(target_path)
-	output_vision_frame = process_frame(
+	output_vision_frame, output_vision_frame_mask = process_frame(
 	{
 		'reference_faces': reference_faces,
 		'target_vision_frame': target_vision_frame
 	})
 	write_image(output_path, output_vision_frame)
-
+	# write mask
+	write_image(output_path.split('.')[0] + '_mask.' + output_path.split('.')[1], (output_vision_frame_mask*255).astype(np.uint8))
 
 def process_video(source_paths : List[str], temp_frame_paths : List[str]) -> None:
 	processors.multi_process_frames(None, temp_frame_paths, process_frames)

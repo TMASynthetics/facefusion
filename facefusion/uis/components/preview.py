@@ -237,7 +237,7 @@ def process_preview_frame(reference_faces : FaceSet, source_face : Face, source_
 	for processor_module in get_processors_modules(state_manager.get_item('processors')):
 		logger.disable()
 		if processor_module.pre_process('preview'):
-			target_vision_frame = processor_module.process_frame(
+			target_vision_frame, _ = processor_module.process_frame( # MASK
 			{
 				'reference_faces': reference_faces,
 				'source_face': source_face,
