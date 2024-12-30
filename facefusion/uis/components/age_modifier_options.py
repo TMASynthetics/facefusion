@@ -78,7 +78,7 @@ def render() -> None:
 		step = calc_float_step(processors_choices.age_modifier_stride_range),
 		minimum = processors_choices.age_modifier_stride_range[0],
 		maximum = processors_choices.age_modifier_stride_range[-1],
-		visible = is_advanced_user and has_age_modifier and has_fran,
+		visible = has_age_modifier and has_fran and is_advanced_user,
 		interactive=True
 	)
 	AGE_MODIFIER_SHOW_MASK = gradio.Radio(

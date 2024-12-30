@@ -29,8 +29,8 @@ def render() -> gradio.Blocks:
 				gradio.update(visible=True), # basic_block2
 				gradio.update(visible=advanced_user), # advanced_block2
 				gradio.update(visible=advanced_user), # advanced_block3
-				gradio.update(visible=advanced_user), # age_modifier_stride slider
-				gradio.update(visible=advanced_user), # face_swapper_model_dropdown
+				gradio.update(visible=advanced_user and 'age_modifier' in state_manager.get_item('processors') and 'fran' in state_manager.get_item('age_modifier_model')), # age_modifier_stride slider
+				gradio.update(visible=advanced_user and 'face_swapper' in state_manager.get_item('processors')), # face_swapper_model_dropdown
 				gradio.update(visible=advanced_user), # log_level dropdown
 				gradio.update(visible=advanced_user), # face_mask_blur slider
 				gradio.update(visible=advanced_user), # output output_path
