@@ -218,6 +218,10 @@ def apply_fran_re_aging(input_array, window_size, stride, mask_array, small_mask
 def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
 	age_modifier_model = state_manager.get_item('age_modifier_model')
 	if age_modifier_model == 'fran':
+		# estimate age
+		source_age_estimate = np.mean(target_face.age)
+		state_manager.set_item('current_source_age_estimate', source_age_estimate)
+		
 		# Load model options and masks
 		mask_path = get_model_options().get('sources').get("mask").get("path")
 		small_mask_path = get_model_options().get('sources').get("small_mask").get("path")
@@ -260,7 +264,7 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 		cropped_image_resized = np.transpose(cropped_image_resized, (2, 0, 1))  # [C, H, W] (3, 1024, 1024)
 
 		# Prepare input array
-		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else 20
+		source_age = state_manager.get_item('age_modifier_source_age') if state_manager.get_item('age_modifier_source_age') else source_age_estimate
 		target_age = state_manager.get_item('age_modifier_target_age') if state_manager.get_item('age_modifier_target_age') else 80
 
 		source_age_channel = np.full_like(cropped_image_resized[:1, :, :], source_age / 100) # create a channel for source_age (1, 1024, 1024)
@@ -295,7 +299,7 @@ def modify_age(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 			crop_masks.append(occlusion_mask)
 		if 'region' in state_manager.get_item('face_mask_types'):
 			region_mask = create_region_mask(crop_vision_frame, state_manager.get_item('face_mask_regions'))
-			cv2.imwrite("mask_region_mask.jpg", region_mask*255.)
+			# cv2.imwrite("data/tests/mask_region_mask.jpg", region_mask*255.)
 			crop_masks.append(region_mask)
 		crop_mask = np.minimum.reduce(crop_masks).clip(0, 1)
 		
