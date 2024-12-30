@@ -17,15 +17,23 @@ LOG_BUFFER = io.StringIO()
 LOG_HANDLER = logging.StreamHandler(LOG_BUFFER)
 TQDM_UPDATE = tqdm.update
 
+def get_visibility_states():
+	advanced_user = state_manager.get_item('advanced_user') == True
+	return advanced_user
+
 
 def render() -> None:
 	global LOG_LEVEL_DROPDOWN
 	global TERMINAL_TEXTBOX
 
+	is_advanced_user = get_visibility_states()
+
 	LOG_LEVEL_DROPDOWN = gradio.Dropdown(
 		label = wording.get('uis.log_level_dropdown'),
 		choices = log_level_set.keys(),
-		value = state_manager.get_item('log_level')
+		value = state_manager.get_item('log_level'),
+		visible = is_advanced_user
+
 	)
 	TERMINAL_TEXTBOX = gradio.Textbox(
 		label = wording.get('uis.terminal_textbox'),
