@@ -32,6 +32,11 @@ FaceDebuggerInputs = TypedDict('FaceDebuggerInputs',
 	'reference_faces' : FaceSet,
 	'target_vision_frame' : VisionFrame
 })
+MaskExporterInputs = TypedDict('MaskExporterInputs',
+{
+	'reference_faces' : FaceSet,
+	'target_vision_frame' : VisionFrame
+})
 FaceEditorInputs = TypedDict('FaceEditorInputs',
 {
 	'reference_faces' : FaceSet,

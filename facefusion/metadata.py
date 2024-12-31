@@ -6,7 +6,7 @@ METADATA =\
 	# 'description': 'Industry leading face manipulation platform',
 	'version': '1.1',
 	# 'license': 'MIT',
-	# 'author': 'Henry Ruhs',
+	# 'author': 'TMA Synthetics',
 	# 'url': 'https://facefusion.io'  
 }
 
