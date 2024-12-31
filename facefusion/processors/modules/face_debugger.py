@@ -171,7 +171,7 @@ def debug_face(target_face : Face, temp_vision_frame : VisionFrame) -> VisionFra
 
 
 def get_reference_frame(source_face : Face, target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
-	None, None
+	return None, None
 
 
 def process_frame(inputs : FaceDebuggerInputs) -> VisionFrame:

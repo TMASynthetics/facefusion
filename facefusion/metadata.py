@@ -4,7 +4,7 @@ METADATA =\
 {
 	'name': 'TMA Synthetics - Face Services',
 	# 'description': 'Industry leading face manipulation platform',
-	'version': '1.0',
+	'version': '1.1',
 	# 'license': 'MIT',
 	# 'author': 'Henry Ruhs',
 	# 'url': 'https://facefusion.io'  
