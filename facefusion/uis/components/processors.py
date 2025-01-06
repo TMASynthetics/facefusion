@@ -27,6 +27,16 @@ def listen() -> None:
 
 
 def update_processors(processors : List[str]) -> gradio.CheckboxGroup:
+
+	# keep the mask exporter as the only processor when selected
+	if 'mask_exporter' in processors:
+		index = processors.index('mask_exporter')
+		if len(processors) > 1:
+			if index != 0:
+				processors = ['mask_exporter']
+			else:
+				processors.pop(index)
+
 	clear_processors_modules(state_manager.get_item('processors'))
 	state_manager.set_item('processors', processors)
 

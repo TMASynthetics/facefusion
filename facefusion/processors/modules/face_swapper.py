@@ -402,6 +402,7 @@ def swap_face(source_face : Face, target_face : Face, temp_vision_frame : Vision
 
 	crop_mask = numpy.minimum.reduce(crop_masks).clip(0, 1)
 	temp_vision_frame, temp_vision_frame_mask = paste_back(temp_vision_frame, crop_vision_frame, crop_mask, affine_matrix)
+
 	return temp_vision_frame, temp_vision_frame_mask
 
 

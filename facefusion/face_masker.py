@@ -135,8 +135,12 @@ def create_region_mask(crop_vision_frame : VisionFrame, face_mask_regions : List
 	prepare_vision_frame = prepare_vision_frame.transpose(0, 3, 1, 2)
 	region_mask = forward_parse_face(prepare_vision_frame)
 	region_mask = numpy.isin(region_mask.argmax(0), [ FACE_MASK_REGIONS[region] for region in face_mask_regions ])
+
+	# Solve bug observed with the swapper at low resolution
+	region_mask = (cv2.GaussianBlur(region_mask.astype(numpy.float32).clip(0, 1), (0, 0), 5).clip(0.5, 1) - 0.5) * 2
 	region_mask = cv2.resize(region_mask.astype(numpy.float32), crop_vision_frame.shape[:2][::-1])
-	region_mask = (cv2.GaussianBlur(region_mask.clip(0, 1), (0, 0), 5).clip(0.5, 1) - 0.5) * 2
+	# region_mask = (cv2.GaussianBlur(region_mask.clip(0, 1), (0, 0), 5).clip(0.5, 1) - 0.5) * 2 
+
 	return region_mask
 
 
