@@ -22,7 +22,7 @@ notebooks/*
 __pycache__/
 *.py[cod]
 *$py.class
-
+.jobs/
 # C extensions
 *.so
 

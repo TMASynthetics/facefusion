@@ -93,7 +93,7 @@ def sanitize_path_for_windows(full_path : str) -> Optional[str]:
 		if buffer_size > buffer_limit:
 			return unicode_buffer.value
 		if buffer_limit == 0:
-			return None
+			return full_path
 		buffer_size = buffer_limit
 
 
