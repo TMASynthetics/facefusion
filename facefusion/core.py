@@ -1,3 +1,4 @@
+import os
 import shutil
 import signal
 import sys
@@ -334,7 +335,9 @@ def process_image(start_time : float) -> ErrorCode:
 	if finalize_image(state_manager.get_item('target_path'), state_manager.get_item('output_path'), state_manager.get_item('output_image_resolution')):
 		logger.debug(wording.get('finalizing_image_succeed'), __name__)
 		# finalize mask image
-		output_mask_path = state_manager.get_item('output_path').split('.')[0] + '_mask.' + state_manager.get_item('output_path').split('.')[1]
+		split_path = os.path.splitext(state_manager.get_item('output_path'))
+		output_mask_path = split_path[0] + '_mask' + split_path[1]
+		
 		if finalize_image(state_manager.get_item('target_path'), output_mask_path, state_manager.get_item('output_image_resolution'), is_mask=True):
 			logger.debug(wording.get('finalizing_mask_image_succeed'), __name__)
 	else:
@@ -398,7 +401,8 @@ def process_video(start_time : float) -> ErrorCode:
 		# merge mask video
 		if merge_video(state_manager.get_item('target_path'), state_manager.get_item('output_video_resolution'), state_manager.get_item('output_video_fps'), is_mask=True):
 			logger.debug(wording.get('merging_video_succeed'), __name__)
-			output_mask_path = state_manager.get_item('output_path').split('.')[0] + '_mask.' + state_manager.get_item('output_path').split('.')[1]
+			split_path = os.path.splitext(state_manager.get_item('output_path'))
+			output_mask_path = split_path[0] + '_mask' + split_path[1]
 			move_temp_file(state_manager.get_item('target_path'), output_mask_path, is_mask=True)
 	else:
 		if is_process_stopping():

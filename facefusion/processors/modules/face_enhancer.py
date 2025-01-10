@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+import os
 from typing import List
 
 import cv2
@@ -385,8 +386,8 @@ def process_frames(source_path : List[str], queue_payloads : List[QueuePayload],
 		})
 		write_image(target_vision_path, output_vision_frame)
 		# write mask
-		write_image(target_vision_path.split('.')[0] + '_mask.' + target_vision_path.split('.')[1], (temp_vision_frame_mask*255).astype(numpy.uint8))
-		update_progress(1)
+		split_path = os.path.splitext(target_vision_path)
+		write_image(split_path[0] + '_mask' + split_path[1], (temp_vision_frame_mask*255).astype(numpy.uint8))
 		update_progress(1)
 
 
@@ -400,7 +401,8 @@ def process_image(source_path : str, target_path : str, output_path : str) -> No
 	})
 	write_image(output_path, output_vision_frame)
 	# write mask
-	write_image(output_path.split('.')[0] + '_mask.' + output_path.split('.')[1], (output_vision_frame_mask*255).astype(numpy.uint8))
+	split_path = os.path.splitext(output_path)
+	write_image(split_path[0] + '_mask' + split_path[1], (output_vision_frame_mask*255).astype(numpy.uint8))
 
 def process_video(source_paths : List[str], temp_frame_paths : List[str]) -> None:
 	processors.multi_process_frames(None, temp_frame_paths, process_frames)
