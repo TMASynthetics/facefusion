@@ -9,6 +9,8 @@ from facefusion.filesystem import create_directory, move_file, remove_directory
 
 def get_temp_file_path(file_path : str, is_mask : bool = False) -> str:
 	_, temp_file_extension = os.path.splitext(os.path.basename(file_path))
+	if temp_file_extension == '.mp4':
+		temp_file_extension = '.mov'
 	temp_directory_path = get_temp_directory_path(file_path)
 	if is_mask:
 		return os.path.join(temp_directory_path, 'temp_mask' + temp_file_extension)
@@ -17,8 +19,11 @@ def get_temp_file_path(file_path : str, is_mask : bool = False) -> str:
 
 
 def move_temp_file(file_path : str, move_path : str, is_mask : bool = False) -> bool:
+	print('\nmove_temp_file')
 	temp_file_path = get_temp_file_path(file_path, is_mask=is_mask)
-	return move_file(temp_file_path, move_path)
+	print(temp_file_path, move_path)
+	move_file(temp_file_path, move_path)
+	return True
 
 
 def get_temp_frame_paths(target_path : str) -> List[str]:

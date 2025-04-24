@@ -264,7 +264,7 @@ def pre_process(mode : ProcessMode) -> bool:
 		return False
 	if mode == 'output' and not same_file_extension([ state_manager.get_item('target_path'), state_manager.get_item('output_path') ]):
 		logger.error(wording.get('match_target_and_output_extension') + wording.get('exclamation_mark'), __name__)
-		return False
+		return True # force prores
 	return True
 
 

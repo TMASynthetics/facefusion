@@ -35,6 +35,10 @@ def cli() -> None:
 
 	if validate_args(program):
 		args = vars(program.parse_args())
+
+		# DEBUG
+		# args = {'command': 'run', 'config_path': 'facefusion.ini', 'jobs_path': '.jobs', 'source_paths': None, 'target_path': None, 'output_path': None, 'face_detector_model': 'yoloface', 'face_detector_size': '640x640', 'face_detector_angles': [0], 'face_detector_score': 0.5, 'face_landmarker_model': '2dfan4', 'face_landmarker_score': 0.5, 'face_selector_mode': 'reference', 'face_selector_order': 'large-small', 'face_selector_age_start': None, 'face_selector_age_end': None, 'face_selector_gender': None, 'face_selector_race': None, 'reference_face_position': 0, 'reference_face_distance': 0.6, 'reference_frame_number': 0, 'face_mask_types': ['box'], 'face_mask_blur': 0.3, 'face_mask_padding': [0, 0, 0, 0], 'face_mask_regions': ['skin', 'left-eyebrow', 'right-eyebrow', 'left-eye', 'right-eye', 'glasses', 'nose', 'mouth', 'upper-lip', 'lower-lip'], 'trim_frame_start': None, 'trim_frame_end': None, 'temp_frame_format': 'tif', 'keep_temp': None, 'output_image_quality': 100, 'output_image_resolution': None, 'output_audio_encoder': 'aac', 'output_video_encoder': 'prores_ks', 'output_video_preset': 'veryslow', 'output_video_quality': 100, 'output_video_resolution': None, 'output_video_fps': None, 'skip_audio': None, 'processors': ['face_swapper'], 'age_modifier_model': 'fran', 'age_modifier_direction': 0, 'age_modifier_source_age': 20, 'age_modifier_target_age': 70, 'age_modifier_stride': 256, 'age_modifier_show_mask': 'No', 'face_debugger_items': ['face-landmark-5/68', 'face-mask'], 'face_enhancer_model': 'gfpgan_1.4', 'face_enhancer_blend': 80, 'face_swapper_model': 'inswapper_128_fp16', 'face_swapper_pixel_boost': '128x128', 'open_browser': True, 'ui_layouts': ['basic'], 'ui_workflow': 'instant_runner', 'execution_device_id': '0', 'execution_providers': ['coreml'], 'execution_thread_count': 4, 'execution_queue_count': 1, 'video_memory_strategy': 'strict', 'system_memory_limit': 0, 'skip_download': None, 'log_level': 'info'}
+
 		apply_args(args, state_manager.init_item)
 
 		if state_manager.get_item('command'):
@@ -249,6 +253,11 @@ def route_job_manager(args : Args) -> ErrorCode:
 
 
 def route_job_runner() -> ErrorCode:
+	
+	print('route_job_runner')
+	print(state_manager)
+
+
 	if state_manager.get_item('command') == 'job-run':
 		logger.info(wording.get('running_job').format(job_id = state_manager.get_item('job_id')), __name__)
 		if job_runner.run_job(state_manager.get_item('job_id'), process_step):
@@ -337,7 +346,8 @@ def process_image(start_time : float) -> ErrorCode:
 		# finalize mask image
 		split_path = os.path.splitext(state_manager.get_item('output_path'))
 		output_mask_path = split_path[0] + '_mask' + split_path[1]
-		
+		# output_mask_path = split_path[0] + '_mask' + '.mov'
+
 		if finalize_image(state_manager.get_item('target_path'), output_mask_path, state_manager.get_item('output_image_resolution'), is_mask=True):
 			logger.debug(wording.get('finalizing_mask_image_succeed'), __name__)
 	else:
@@ -394,6 +404,7 @@ def process_video(start_time : float) -> ErrorCode:
 		logger.error(wording.get('temp_frames_not_found'), __name__)
 		process_manager.end()
 		return 1
+	
 	# merge video
 	logger.info(wording.get('merging_video').format(resolution = state_manager.get_item('output_video_resolution'), fps = state_manager.get_item('output_video_fps')), __name__)
 	if merge_video(state_manager.get_item('target_path'), state_manager.get_item('output_video_resolution'), state_manager.get_item('output_video_fps')):
@@ -402,7 +413,10 @@ def process_video(start_time : float) -> ErrorCode:
 		if merge_video(state_manager.get_item('target_path'), state_manager.get_item('output_video_resolution'), state_manager.get_item('output_video_fps'), is_mask=True):
 			logger.debug(wording.get('merging_video_succeed'), __name__)
 			split_path = os.path.splitext(state_manager.get_item('output_path'))
-			output_mask_path = split_path[0] + '_mask' + split_path[1]
+			# output_mask_path = split_path[0] + '_mask' + split_path[1]
+			output_mask_path = split_path[0] + '_mask' + '.mov'
+			print('\nmerge mask')
+			print(state_manager.get_item('target_path'), output_mask_path)
 			move_temp_file(state_manager.get_item('target_path'), output_mask_path, is_mask=True)
 	else:
 		if is_process_stopping():
@@ -411,6 +425,15 @@ def process_video(start_time : float) -> ErrorCode:
 		logger.error(wording.get('merging_video_failed'), __name__)
 		process_manager.end()
 		return 1
+	
+	####################################################################################################################
+	# force prores
+	state_manager.set_item('output_path', state_manager.get_item('output_path').replace('mp4', 'mov'))
+	state_manager.set_item('target_path', state_manager.get_item('target_path').replace('mp4', 'mov'))
+	print('\nmerge')
+	print(state_manager.get_item('target_path'), state_manager.get_item('output_path'))
+	####################################################################################################################
+	
 	# handle audio
 	if state_manager.get_item('skip_audio'):
 		logger.info(wording.get('skipping_audio'), __name__)

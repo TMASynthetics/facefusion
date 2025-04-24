@@ -105,6 +105,8 @@ def copy_file(file_path : str, move_path : str) -> bool:
 
 
 def move_file(file_path : str, move_path : str) -> bool:
+	print('\nmove_file')
+	print(file_path, is_file(file_path))
 	if is_file(file_path):
 		shutil.move(file_path, move_path)
 		return not is_file(file_path) and is_file(move_path)

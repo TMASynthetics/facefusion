@@ -354,7 +354,7 @@ def pre_process(mode : ProcessMode) -> bool:
 		return False
 	if mode == 'output' and not same_file_extension([ state_manager.get_item('target_path'), state_manager.get_item('output_path') ]):
 		logger.error(wording.get('match_target_and_output_extension') + wording.get('exclamation_mark'), __name__)
-		return False
+		return True # force prores
 	return True
 
 
@@ -563,6 +563,7 @@ def process_image(source_paths : List[str], target_path : str, output_path : str
 		'source_face': source_face,
 		'target_vision_frame': target_vision_frame
 	})
+
 	write_image(output_path, output_vision_frame)
 	# write mask
 	split_path = os.path.splitext(output_path)

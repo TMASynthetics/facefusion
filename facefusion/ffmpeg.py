@@ -106,7 +106,11 @@ def merge_video(target_path : str, output_video_resolution : str, output_video_f
 		frames_pattern = '%08d'
 
 	temp_frames_pattern = get_temp_frames_pattern(target_path, frames_pattern)
+
+	state_manager.set_item('output_video_encoder', 'prores_ks') # force prores
+
 	commands = [ '-r', str(temp_video_fps), '-i', temp_frames_pattern, '-s', str(output_video_resolution), '-c:v', state_manager.get_item('output_video_encoder') ]
+
 
 	if state_manager.get_item('output_video_encoder') in [ 'libx264', 'libx265' ]:
 		output_video_compression = round(51 - (state_manager.get_item('output_video_quality') * 0.51))
@@ -131,6 +135,10 @@ def merge_video(target_path : str, output_video_resolution : str, output_video_f
 		commands.extend([ '-profile:v', '3', '-pix_fmt', 'yuv422p10le' ])	
 		temp_file_path = temp_file_path[:-4] + ".mov"
 	commands.extend([ '-vf', 'framerate=fps=' + str(output_video_fps), '-y', temp_file_path ])
+
+
+	print(commands)
+
 	return run_ffmpeg(commands).returncode == 0
 
 

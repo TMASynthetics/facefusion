@@ -77,10 +77,12 @@ def start() -> Tuple[gradio.Button, gradio.Button]:
 def run() -> Tuple[gradio.Button, gradio.Button, gradio.Image, gradio.Image, gradio.Video, gradio.Video]:
 	step_args = collect_step_args()
 	output_path = step_args.get('output_path')
-
+	step_args['output_video_encoder'] = 'prores_ks' # force prores
 	if is_directory(step_args.get('output_path')):
 		step_args['output_path'] = suggest_output_path(step_args.get('output_path'), state_manager.get_item('target_path'))
+		step_args['output_path'] = step_args['output_path'].replace('mp4','mov') # force prores
 	if job_manager.init_jobs(state_manager.get_item('jobs_path')):
+		print('output_path', output_path)
 		create_and_run_job(step_args)
 		state_manager.set_item('output_path', output_path)
 	if is_image(step_args.get('output_path')):
